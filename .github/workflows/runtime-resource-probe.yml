@@ -1,0 +1,74 @@
+name: Runtime Resource Probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: GitHub-hosted runner label
+        required: true
+        default: ubuntu-24.04
+        type: choice
+        options:
+          - ubuntu-24.04
+      strict:
+        description: Fail when a required runtime capability is missing
+        required: true
+        default: true
+        type: boolean
+      debug_tmate:
+        description: Open an interactive SSH session before running the probe
+        required: true
+        default: false
+        type: boolean
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: runtime-resource-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  probe:
+    name: Probe ${{ inputs.runner || 'ubuntu-24.04' }}
+    runs-on: ${{ inputs.runner || 'ubuntu-24.04' }}
+    timeout-minutes: 30
+    env:
+      STRICT: ${{ inputs.strict != false && '1' || '0' }}
+      PROBE_LOG_DIR: /tmp/runtime-resource-probe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Open tmate session
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_tmate }}
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
+
+      - name: Install probe dependencies
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates \
+            gcc \
+            jq \
+            util-linux
+
+      - name: Run probe
+        run: sudo -E bash scripts/runtime-resource-probe.sh
+
+      - name: Upload probe logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-resource-probe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.PROBE_LOG_DIR }}/**
+          if-no-files-found: ignore
