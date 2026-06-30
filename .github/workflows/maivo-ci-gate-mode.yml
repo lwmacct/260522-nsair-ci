@@ -93,63 +93,23 @@ jobs:
           repo-token: ${{ github.token }}
 
       - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            build-essential \
-            jq \
-            libseccomp-dev \
-            pkg-config \
-            util-linux
+        run: bash scripts/maivo-ci.sh install-dependencies
 
       - name: Show host capabilities
-        run: |
-          set -euxo pipefail
-          uname -a
-          cat /sys/kernel/security/lsm || true
-          findmnt /sys/fs/bpf || true
-          docker version
-          docker info
-          go version
-          task --version
+        run: bash scripts/maivo-ci.sh show-host-capabilities
 
       - name: Setup Maivo runtime host
-        working-directory: maivo
-        run: |
-          sudo -E env \
-            "PATH=$PATH" \
-            "BUILDTAGS=$BUILDTAGS" \
-            "MAIVO_GATE_MODE=$MAIVO_GATE_MODE" \
-            "MAIVO_CI_TEST_ROOT=$MAIVO_CI_TEST_ROOT" \
-            "MAIVO_CI_IMAGE_CACHE_DIR=$MAIVO_CI_IMAGE_CACHE_DIR" \
-            task ci:test:setup
+        run: bash scripts/maivo-ci.sh setup-runtime-host
 
       - name: Verify CI gate mode
-        run: |
-          sudo systemctl is-active --quiet maivo-daemon.service
-          sudo systemctl cat maivo-daemon.service
-          sudo maivo-daemon gate status
-          sudo maivo-daemon gate status | jq -e '.mode == "ci" and .enforce == false'
+        run: bash scripts/maivo-ci.sh verify-gate
+
+      - name: Run procfs CPU workload
+        run: bash scripts/maivo-ci.sh procfs-cpu
 
       - name: Collect logs
         if: always()
-        run: |
-          _log_dir="${MAIVO_CI_TEST_ROOT}/runs/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/logs"
-          sudo install -d -m 0755 "$_log_dir"
-          {
-            uname -a || true
-            cat /sys/kernel/security/lsm || true
-            findmnt /sys/fs/bpf || true
-            docker info || true
-            sudo systemctl --no-pager --full status docker.service maivo-daemon.service || true
-            sudo systemctl cat maivo-daemon.service || true
-            sudo maivo-daemon gate status || true
-            sudo journalctl --no-pager -u docker.service -u maivo-daemon.service || true
-          } 2>&1 | sudo tee "${_log_dir}/host-diagnostics.log" >/dev/null
-          if sudo test -f /var/log/maivo-daemon.log; then
-            sudo cp /var/log/maivo-daemon.log "${_log_dir}/maivo-daemon.log"
-            sudo chmod 0644 "${_log_dir}/maivo-daemon.log"
-          fi
+        run: bash scripts/maivo-ci.sh collect-logs
 
       - name: Upload logs
         if: always()

@@ -71,12 +71,7 @@ jobs:
             cache-warmup-${{ runner.os }}-${{ runner.arch }}-go-${{ steps.setup-go.outputs.go-version }}-
 
       - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            build-essential \
-            libseccomp-dev \
-            pkg-config
+        run: bash scripts/maivo-ci.sh install-dependencies
 
       - name: Install Task
         uses: go-task/setup-task@v2
@@ -85,11 +80,7 @@ jobs:
           repo-token: ${{ github.token }}
 
       - name: Warm Go build cache
-        working-directory: maivo
-        run: |
-          set -euo pipefail
-          go mod download
-          BIN_DIR=bin BUILDTAGS="${BUILDTAGS}" task build
+        run: bash scripts/maivo-ci.sh warm-go-cache
 
       - name: Save Go modules and build cache
         if: steps.go-cache.outputs.cache-hit != 'true'

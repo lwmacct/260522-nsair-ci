@@ -15,9 +15,9 @@ only the resources needed by runtime validation:
 When manually dispatching the workflow, enable `debug_tmate` to open an SSH
 session on the GitHub-hosted runner before the probe runs.
 
-`Maivo CI Gate Mode` checks out `lwmacct/260522-maivo` and runs
-`task ci:test:setup` with `MAIVO_GATE_MODE=ci`, which verifies that the daemon
-can start on standard GitHub-hosted runners without active BPF LSM.
+`Maivo CI Gate Mode` checks out `lwmacct/260522-maivo` as the tested source
+tree. The runtime setup, gate check, diagnostics, and workload flow live in this
+repository under `scripts/maivo-ci.sh` and `workloads/`.
 
 Because `lwmacct/260522-maivo` is private, configure repository secret
 `MAIVO_REPO_TOKEN` before running `Maivo CI Gate Mode`. A fine-grained GitHub
