@@ -18,3 +18,9 @@ session on the GitHub-hosted runner before the probe runs.
 `Maivo CI Gate Mode` checks out `lwmacct/260522-maivo` and runs
 `task ci:test:setup` with `MAIVO_GATE_MODE=ci`, which verifies that the daemon
 can start on standard GitHub-hosted runners without active BPF LSM.
+
+Because `lwmacct/260522-maivo` is private, configure repository secret
+`MAIVO_REPO_TOKEN` before running `Maivo CI Gate Mode`. A fine-grained GitHub
+token with read-only Contents permission on `lwmacct/260522-maivo` is enough.
+The workflow is manual-only so pushes to this public probe repository do not
+fail before the secret exists.

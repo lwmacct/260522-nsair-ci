@@ -13,9 +13,6 @@ on:
         required: true
         default: false
         type: boolean
-  push:
-    branches:
-      - main
 
 concurrency:
   group: maivo-ci-gate-mode-${{ github.ref }}
@@ -43,12 +40,22 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
+      - name: Require private repository token
+        env:
+          MAIVO_REPO_TOKEN: ${{ secrets.MAIVO_REPO_TOKEN }}
+        run: |
+          if [[ -z "${MAIVO_REPO_TOKEN}" ]]; then
+            echo "::error::Set repository secret MAIVO_REPO_TOKEN with read access to lwmacct/260522-maivo."
+            exit 1
+          fi
+
       - name: Checkout Maivo
         uses: actions/checkout@v4
         with:
           repository: lwmacct/260522-maivo
           ref: ${{ inputs.maivo_ref || 'main' }}
           path: maivo
+          token: ${{ secrets.MAIVO_REPO_TOKEN }}
 
       - name: Open tmate session
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_tmate }}
