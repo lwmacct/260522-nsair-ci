@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# shellcheck disable=all
+
 set -euo pipefail
 
 _workload_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
