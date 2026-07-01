@@ -84,7 +84,7 @@ def worker(index, start, errors):
     sysinfo_iterations = getenv_int("CI_SECCOMP_NOTIFY_CONCURRENCY_SYSINFO_ITERATIONS", 32)
     openat2_iterations = getenv_int("CI_SECCOMP_NOTIFY_CONCURRENCY_OPENAT2_ITERATIONS", 8)
     mount_iterations = getenv_int("CI_SECCOMP_NOTIFY_CONCURRENCY_MOUNT_ITERATIONS", 8)
-    mount_root = tempfile.mkdtemp(prefix=f"maivo-seccomp-notify-concurrency-{index}-", dir="/tmp")
+    mount_root = tempfile.mkdtemp(prefix=f"nsair-seccomp-notify-concurrency-{index}-", dir="/tmp")
     mount_target = os.path.join(mount_root, "security")
     os.mkdir(mount_target)
 

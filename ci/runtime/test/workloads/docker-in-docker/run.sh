@@ -25,14 +25,14 @@ __prepare() {
 	install -d -m 0755 "${_root}/data" "${_root}/docker/certs"
 	stat -c 'host-before %u:%g %n' "${_root}/data" "${_root}/docker" "${_root}/docker/certs"
 
-	cat >"${_test_root}/maivo-docker-in-docker-compose.yml" <<EOF
+	cat >"${_test_root}/nsair-docker-in-docker-compose.yml" <<EOF
 services:
   docker-in-docker:
     container_name: ${_docker_in_docker_name}
     hostname: ${_docker_in_docker_name}
     image: "${_docker_in_docker_image}"
     restart: "no"
-    runtime: maivo-runtime
+    runtime: nsair-runtime
     privileged: false
     annotations:
       io.backend.security.profile: dind
@@ -83,14 +83,14 @@ __main() {
 
 	__require_cmd docker
 	__require_cmd flock
-	__assert_maivo_ready
+	__assert_nsair_ready
 	__build_ci_image "$_docker_in_docker_image" "${_workload_dir}/workloads/docker-in-docker" --build-arg "BASE_IMAGE=${_docker_in_docker_base_image}"
 	__build_ci_image "$_inner_nginx_image" "${_workload_path}" -f "${_workload_path}/nginx.Dockerfile" --build-arg "BASE_IMAGE=${_inner_nginx_base_image}"
 	__prepare
 
 	__log "starting Docker-in-Docker validation container"
 	__ensure_host_image "$_docker_in_docker_image"
-	docker compose -f "${_test_root}/maivo-docker-in-docker-compose.yml" up -d --remove-orphans
+	docker compose -f "${_test_root}/nsair-docker-in-docker-compose.yml" up -d --remove-orphans
 
 	__log "checking idmapped bind mounts"
 	stat -c 'host-after %u:%g %n' "${_root}/data" "${_root}/docker" "${_root}/docker/certs"
@@ -104,7 +104,7 @@ __main() {
 
 	__log "checking inner docker"
 	__wait_for_inner_docker "$_docker_in_docker_name"
-	docker exec "$_docker_in_docker_name" maivo-ci-docker-in-docker-smoke
+	docker exec "$_docker_in_docker_name" nsair-ci-docker-in-docker-smoke
 
 	__log "checking host docker top"
 	docker top "$_docker_in_docker_name" >/dev/null
@@ -112,7 +112,7 @@ __main() {
 	__log "checking Docker-in-Docker restart"
 	docker restart -t 1 "$_docker_in_docker_name"
 	__wait_for_inner_docker "$_docker_in_docker_name" "restart "
-	docker exec "$_docker_in_docker_name" maivo-ci-docker-in-docker-smoke
+	docker exec "$_docker_in_docker_name" nsair-ci-docker-in-docker-smoke
 
 	__log "checking Docker-in-Docker stop/start"
 	docker stop -t 1 "$_docker_in_docker_name"
@@ -126,7 +126,7 @@ __main() {
 	docker exec "$_docker_in_docker_name" sh -lc "docker run -d -p 80:80 --name=nginx '$_inner_nginx_image' >/dev/null"
 	docker exec "$_docker_in_docker_name" sh -lc 'docker ps --filter name=nginx --format "inner-nginx {{.Status}} {{.Ports}}"'
 
-	__assert_maivo_ready
+	__assert_nsair_ready
 	echo "docker-in-docker-validation-ok"
 }
 

@@ -21,10 +21,10 @@ __main() {
 	fi
 
 	__require_cmd docker
-	__assert_maivo_ready
+	__assert_nsair_ready
 	__init_ci_dirs
 
-	_log_start="$(wc -l </var/log/maivo-daemon.log 2>/dev/null || printf '0\n')"
+	_log_start="$(wc -l </var/log/nsair-daemon.log 2>/dev/null || printf '0\n')"
 	docker rm -f "$_seccomp_notify_concurrency_name" >/dev/null 2>&1 || true
 	__build_ci_image "$_seccomp_notify_concurrency_image" "${_workload_dir}/workloads/seccomp-notify-concurrency" --build-arg "BASE_IMAGE=${_seccomp_notify_concurrency_base_image}"
 
@@ -32,7 +32,7 @@ __main() {
 	docker run --rm \
 		--name "$_seccomp_notify_concurrency_name" \
 		--hostname "$_seccomp_notify_concurrency_name" \
-		--runtime maivo-runtime \
+		--runtime nsair-runtime \
 		--cgroupns=private \
 		--label io.backend.security.profile=default \
 		-e "CI_SECCOMP_NOTIFY_CONCURRENCY_PROCESSES=${_seccomp_notify_concurrency_processes}" \
@@ -42,13 +42,13 @@ __main() {
 		"$_seccomp_notify_concurrency_image"
 
 	__log "checking seccomp notify concurrency diagnostics"
-	if tail -n +"$((_log_start + 1))" /var/log/maivo-daemon.log 2>/dev/null |
+	if tail -n +"$((_log_start + 1))" /var/log/nsair-daemon.log 2>/dev/null |
 		grep -E "Seccomp notification timed out|nsenter broker concurrency limit reached|in-flight limit reached|dispatcher queue full|invalid tracee|seccomp response already sent" >&2; then
 		echo "seccomp notify concurrency workload produced forbidden daemon diagnostics" >&2
 		exit 1
 	fi
 
-	__assert_maivo_ready
+	__assert_nsair_ready
 	echo "seccomp-notify-concurrency-validation-ok"
 }
 

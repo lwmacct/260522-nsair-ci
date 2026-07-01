@@ -3,7 +3,7 @@ FROM ${BASE_IMAGE}
 
 RUN apk add --no-cache build-base
 
-COPY probe.py /usr/local/bin/maivo-ci-procfs-memory-probe
-RUN chmod +x /usr/local/bin/maivo-ci-procfs-memory-probe
+COPY probe.py /usr/local/bin/nsair-ci-procfs-memory-probe
+RUN chmod +x /usr/local/bin/nsair-ci-procfs-memory-probe
 
-CMD ["/usr/local/bin/maivo-ci-procfs-memory-probe"]
+CMD ["/usr/local/bin/nsair-ci-procfs-memory-probe"]

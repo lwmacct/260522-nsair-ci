@@ -20,7 +20,7 @@ __check_cgroup() {
 			;;
 	esac
 	[ -d /sys/fs/cgroup/init.scope ]
-	_test_cg="/sys/fs/cgroup/maivo-ci-delegation-$$"
+	_test_cg="/sys/fs/cgroup/nsair-ci-delegation-$$"
 	trap 'rmdir "$_test_cg" 2>/dev/null || true' EXIT
 	mkdir "$_test_cg"
 	[ -d "$_test_cg" ]
@@ -29,7 +29,7 @@ __check_cgroup() {
 }
 
 __check_resources() {
-	_base="/tmp/maivo-ci-resource-negative-$$"
+	_base="/tmp/nsair-ci-resource-negative-$$"
 	trap 'umount "$_base"/unsafe-* "$_base/cgroup-rw" "$_base/cgroup-root-bind" "$_base/overlay2/id/merged/dev/kmsg" "$_base/netns/not-net" 2>/dev/null || true; rm -rf "$_base"' EXIT
 	mkdir -p "$_base/cgroup-rw" "$_base/cgroup-root-bind" "$_base/overlay2/id/merged/dev" "$_base/netns"
 	: >"$_base/overlay2/id/merged/dev/kmsg"
@@ -68,8 +68,8 @@ __check_resources() {
 }
 
 __check_cgroup_subtree_mount_policy() {
-	_base="/tmp/maivo-ci-cgroup-subtree-$$"
-	_leaf="/sys/fs/cgroup/maivo-ci-bpf-subtree-$$"
+	_base="/tmp/nsair-ci-cgroup-subtree-$$"
+	_leaf="/sys/fs/cgroup/nsair-ci-bpf-subtree-$$"
 	trap 'printf "%s\n" "$$" >/sys/fs/cgroup/cgroup.procs 2>/dev/null || true; umount "$_base"/unsafe-* 2>/dev/null || true; rmdir "$_leaf" 2>/dev/null || true; rm -rf "$_base"' EXIT
 	mkdir -p "$_base" "$_leaf"
 	printf '%s\n' "$$" >"$_leaf/cgroup.procs"
@@ -152,7 +152,7 @@ __check_kernel_interface_files() {
 }
 
 __check_cgroup_subtree_kernel_interface_files() {
-	_leaf="/sys/fs/cgroup/maivo-ci-bpf-file-subtree-$$"
+	_leaf="/sys/fs/cgroup/nsair-ci-bpf-file-subtree-$$"
 	trap 'printf "%s\n" "$$" >/sys/fs/cgroup/cgroup.procs 2>/dev/null || true; rmdir "$_leaf" 2>/dev/null || true' EXIT
 	mkdir -p "$_leaf"
 	printf '%s\n' "$$" >"$_leaf/cgroup.procs"
@@ -166,9 +166,9 @@ import errno
 import os
 import sys
 
-base = f"/tmp/maivo-ci-xattr-negative-{os.getpid()}"
+base = f"/tmp/nsair-ci-xattr-negative-{os.getpid()}"
 path = os.path.join(base, "target")
-name = b"user.maivo_ci_denied"
+name = b"user.nsair_ci_denied"
 
 os.makedirs(base, exist_ok=True)
 with open(path, "wb") as f:
@@ -199,7 +199,7 @@ import errno
 import os
 import shutil
 
-base = f"/var/lib/docker/overlay2/maivo-ci-xattr-{os.getpid()}"
+base = f"/var/lib/docker/overlay2/nsair-ci-xattr-{os.getpid()}"
 diff = os.path.join(base, "diff")
 name = b"trusted.overlay.origin"
 value = b"y"
@@ -236,15 +236,15 @@ __reject_write() {
 		exit 1
 	fi
 	_value="$(cat "$_path" 2>/dev/null || true)"
-	if sh -c 'printf "%s\n" "$1" > "$2"' sh "$_value" "$_path" 2>/tmp/maivo-sysctl-write.err; then
+	if sh -c 'printf "%s\n" "$1" > "$2"' sh "$_value" "$_path" 2>/tmp/nsair-sysctl-write.err; then
 		echo "host-global sysctl write unexpectedly succeeded: $_path" >&2
 		exit 1
 	fi
 }
 
 __check_proc_sys() {
-	if mount | grep -q "maivofs on /proc/sys "; then
-		echo "unexpected maivofs mount on /proc/sys" >&2
+	if mount | grep -q "nsairfs on /proc/sys "; then
+		echo "unexpected nsairfs mount on /proc/sys" >&2
 		exit 1
 	fi
 	for _path in ${real_namespaced_sysctls:-}; do

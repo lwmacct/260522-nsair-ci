@@ -46,7 +46,7 @@ __import_image_archive() {
 
 	_archive="$(__image_archive_path "$_image")"
 	_archive_base="$(basename "$_archive")"
-	docker exec "$_kubernetes_k3s_name" ctr -n k8s.io images import "/opt/maivo/images/${_archive_base}" >/dev/null
+	docker exec "$_kubernetes_k3s_name" ctr -n k8s.io images import "/opt/nsair/images/${_archive_base}" >/dev/null
 	docker exec "$_kubernetes_k3s_name" ctr -n k8s.io images ls | grep -F "$_image"
 }
 
@@ -74,16 +74,16 @@ __main() {
 
 	__require_cmd docker
 	__require_cmd flock
-	__assert_maivo_ready
+	__assert_nsair_ready
 	__build_ci_image "$_kubernetes_k3s_image" "${_workload_dir}/workloads/kubernetes-k3s" --build-arg "BASE_IMAGE=${_kubernetes_k3s_base_image}"
 	__build_ci_image "$_inner_nginx_image" "${_workload_path}" -f "${_workload_path}/nginx.Dockerfile" --build-arg "BASE_IMAGE=${_inner_nginx_base_image}"
 	__prepare
 
-	__log "starting k3s Kubernetes node under maivo-runtime"
+	__log "starting k3s Kubernetes node under nsair-runtime"
 	docker run -d \
 		--name "$_kubernetes_k3s_name" \
 		--hostname "$_kubernetes_k3s_name" \
-		--runtime maivo-runtime \
+		--runtime nsair-runtime \
 		--cgroupns=private \
 		--annotation io.backend.security.profile=k8s-node \
 		--label io.backend.security.profile=k8s-node \
@@ -91,7 +91,7 @@ __main() {
 		--tmpfs /run \
 		--tmpfs /run/lock \
 		-v "${_root}:/var/lib/rancher/k3s" \
-		-v "${_image_cache_dir}:/opt/maivo/images:ro" \
+		-v "${_image_cache_dir}:/opt/nsair/images:ro" \
 		-e K3S_KUBECONFIG_MODE=644 \
 		"$_kubernetes_k3s_image" \
 		server \
@@ -117,7 +117,7 @@ kind: Pod
 metadata:
   name: ${_kubernetes_k3s_pod_name}
   labels:
-    app: maivo-kubernetes-k3s-ci
+    app: nsair-kubernetes-k3s-ci
 spec:
   nodeName: ${_kubernetes_k3s_name}
   hostNetwork: true
@@ -138,7 +138,7 @@ EOF
 		if [[ "$_phase" == "Running" && "$_ready" == "true" ]]; then
 			docker exec "$_kubernetes_k3s_name" kubectl get pod "$_kubernetes_k3s_pod_name" -o wide
 			echo "kubernetes-k3s-pod-ok"
-			__assert_maivo_ready
+			__assert_nsair_ready
 			echo "kubernetes-k3s-validation-ok"
 			return
 		fi

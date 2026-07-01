@@ -51,18 +51,18 @@ __main() {
 
 	__require_cmd docker
 	__require_cmd systemctl
-	__assert_maivo_ready
+	__assert_nsair_ready
 	__init_ci_dirs
 	docker rm -f "$_systemd_pid1_name" >/dev/null 2>&1 || true
 	rm -rf "$_root"
 	install -d -m 0755 "$_root"
 	__build_ci_image "$_systemd_pid1_image" "${_workload_dir}/workloads/systemd-pid1" --build-arg "BASE_IMAGE=${_systemd_pid1_base_image}"
 
-	__log "running systemd as pid 1 under maivo-runtime"
+	__log "running systemd as pid 1 under nsair-runtime"
 	docker run -d \
 		--name "$_systemd_pid1_name" \
 		--hostname "$_systemd_pid1_name" \
-		--runtime maivo-runtime \
+		--runtime nsair-runtime \
 		--cgroupns=private \
 		--label io.backend.security.profile=default \
 		--entrypoint /usr/bin/systemd \
@@ -98,27 +98,27 @@ __main() {
 		echo "/sys/fs/cgroup is not delegated rw cgroup2" >&2
 		exit 1
 	fi
-	_test_cg="/sys/fs/cgroup/maivo-ci-systemd-$$"
+	_test_cg="/sys/fs/cgroup/nsair-ci-systemd-$$"
 	trap '\''rmdir "$_test_cg" 2>/dev/null || true'\'' EXIT
 	mkdir "$_test_cg"
 	rmdir "$_test_cg"
-	systemctl start maivo-ci-probe.service
-	systemctl is-active --quiet maivo-ci-probe.service
-	systemctl show maivo-ci-probe.service -p ActiveState -p SubState -p Result --no-pager
+	systemctl start nsair-ci-probe.service
+	systemctl is-active --quiet nsair-ci-probe.service
+	systemctl show nsair-ci-probe.service -p ActiveState -p SubState -p Result --no-pager
 	systemctl is-active --quiet dbus.service
 	systemctl is-active --quiet cron.service
 	systemctl is-active --quiet rsyslog.service
 	systemctl is-active --quiet ssh.service
 	test -f /work/systemd-unit-probe
 	stat -c "systemd-container-work %u:%g %n" /work /work/systemd-unit-probe
-	systemctl list-units --type=service --no-pager | grep -F maivo-ci-probe.service
+	systemctl list-units --type=service --no-pager | grep -F nsair-ci-probe.service
 	systemctl list-units --type=service --state=running --no-pager
 	echo "systemd-container-cgroup-ok"
 	echo "systemd-unit-ok"
 '
 
 	stat -c 'systemd-pid1-host-probe %u:%g %n' "${_root}/systemd-unit-probe"
-	__assert_maivo_ready
+	__assert_nsair_ready
 	echo "systemd-pid1-validation-ok"
 }
 

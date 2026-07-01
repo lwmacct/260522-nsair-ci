@@ -108,7 +108,7 @@ def assert_visible_swaps(expected_swap_total_kib=None):
         raise RuntimeError(f"/proc/swaps has {len(entries)} entries, want 1")
     entry = entries[0]
     expected_used_kib = swap_total_kib - swap_free_kib
-    if entry["filename"] != "/maivo.swap" or entry["type"] != "file" or entry["priority"] != -2:
+    if entry["filename"] != "/nsair.swap" or entry["type"] != "file" or entry["priority"] != -2:
         raise RuntimeError(f"unexpected synthetic /proc/swaps entry: {entry}")
     if entry["size"] != swap_total_kib:
         raise RuntimeError(f"/proc/swaps Size={entry['size']}kB, want {swap_total_kib}kB")
@@ -128,8 +128,8 @@ def compile_sysinfo_probe():
     if compiler is None:
         raise RuntimeError("cc is required for sysinfo validation")
 
-    source = "/tmp/maivo-ci-sysinfo-probe.c"
-    binary = "/tmp/maivo-ci-sysinfo-probe"
+    source = "/tmp/nsair-ci-sysinfo-probe.c"
+    binary = "/tmp/nsair-ci-sysinfo-probe"
     with open(source, "w", encoding="utf-8") as file:
         file.write(
             r"""

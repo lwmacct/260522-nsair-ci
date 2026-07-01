@@ -31,7 +31,7 @@ RUN set -eux; \
 	test -L /sbin; \
 	test -L /lib; \
 	if [ -e /lib64 ]; then test -L /lib64; fi; \
-	install -d -m 0755 /opt/maivo-ci /work /run/sshd; \
+	install -d -m 0755 /opt/nsair-ci /work /run/sshd; \
 	printf 'root:root\n' | chpasswd; \
 	systemctl set-default multi-user.target; \
 	systemctl mask \
@@ -50,19 +50,19 @@ RUN set -eux; \
 	systemctl disable ssh.socket; \
 	systemctl enable ssh.service cron.service rsyslog.service
 
-COPY probe.sh /usr/local/bin/maivo-ci-systemd-pid1-probe
+COPY probe.sh /usr/local/bin/nsair-ci-systemd-pid1-probe
 
 RUN set -eux; \
-	chmod +x /usr/local/bin/maivo-ci-systemd-pid1-probe; \
-	cat >/etc/systemd/system/maivo-ci-probe.service <<'EOF'
+	chmod +x /usr/local/bin/nsair-ci-systemd-pid1-probe; \
+	cat >/etc/systemd/system/nsair-ci-probe.service <<'EOF'
 [Unit]
-Description=Maivo CI systemd probe
+Description=Nsair CI systemd probe
 After=local-fs.target
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/local/bin/maivo-ci-systemd-pid1-probe
+ExecStart=/usr/local/bin/nsair-ci-systemd-pid1-probe
 
 [Install]
 WantedBy=multi-user.target
