@@ -18,11 +18,11 @@ source "${_workload_dir}/library/images.sh"
 __usage() {
   local _workload
   cat <<'EOF'
-usage: scripts/nsair-ci.sh run-workloads [workload...]
+usage: scripts/ci.sh run-workloads [workload...]
 
-  scripts/nsair-ci.sh run-workloads all
+  scripts/ci.sh run-workloads all
                          run all workload tests
-  scripts/nsair-ci.sh run-workloads docker-in-docker procfs-cpu
+  scripts/ci.sh run-workloads docker-in-docker procfs-cpu
                          run selected workload tests concurrently
 
 available workloads:

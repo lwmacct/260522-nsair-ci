@@ -18,7 +18,7 @@ session on the GitHub-hosted runner before the probe runs.
 `Nsair CI Gate Mode` validates binaries extracted from a public GHCR image,
 for example `ghcr.io/lwmacct/260522-nsair:v0.33.260701`. The runtime setup,
 gate check, diagnostics, and workload flow live in this repository under
-`scripts/nsair-ci.sh` and `ci/runtime/test/`.
+`scripts/ci.sh` and `ci/runtime/test/`.
 
 All migrated runtime workloads are stored in `ci/runtime/test/workloads/`.
 The workflow runs workloads as a GitHub Actions matrix, so every workload gets

@@ -304,7 +304,7 @@ __collect_logs() {
 
 __usage() {
   cat <<'EOF'
-usage: scripts/nsair-ci.sh <command>
+usage: scripts/ci.sh <command>
 
 commands:
   install-dependencies

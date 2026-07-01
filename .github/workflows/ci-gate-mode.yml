@@ -143,23 +143,23 @@ jobs:
           oras version
 
       - name: Install dependencies
-        run: bash scripts/nsair-ci.sh install-dependencies
+        run: bash scripts/ci.sh install-dependencies
 
       - name: Show host capabilities
-        run: bash scripts/nsair-ci.sh show-host-capabilities
+        run: bash scripts/ci.sh show-host-capabilities
 
       - name: Setup Nsair runtime host
-        run: bash scripts/nsair-ci.sh setup-runtime-host
+        run: bash scripts/ci.sh setup-runtime-host
 
       - name: Verify CI gate mode
-        run: bash scripts/nsair-ci.sh verify-gate
+        run: bash scripts/ci.sh verify-gate
 
       - name: Run runtime workload
-        run: bash scripts/nsair-ci.sh run-workload "${{ matrix.workload }}"
+        run: bash scripts/ci.sh run-workload "${{ matrix.workload }}"
 
       - name: Collect logs
         if: always()
-        run: bash scripts/nsair-ci.sh collect-logs
+        run: bash scripts/ci.sh collect-logs
 
       - name: Upload logs
         if: always()
