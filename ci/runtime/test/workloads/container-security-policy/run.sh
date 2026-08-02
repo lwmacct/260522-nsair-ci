@@ -61,7 +61,7 @@ __assert_bpf_mount_audit() {
 
   _deadline=$((SECONDS + 15))
   while ((SECONDS <= _deadline)); do
-    _log="$(tail -n +"$((_log_start + 1))" /var/log/nsair-daemon.log 2>/dev/null || true)"
+    _log="$(tail -n +"$((_log_start + 1))" "$_supervisor_log" 2>/dev/null || true)"
     if awk \
       -v _profile="profile=${_profile}" \
       -v _fs_type="fs_type=${_fs_type}" \
@@ -78,7 +78,7 @@ __assert_bpf_mount_audit() {
   done
 
   echo "missing BPF LSM mount deny audit for profile=${_profile} fs_type=${_fs_type}" >&2
-  tail -n +"$((_log_start + 1))" /var/log/nsair-daemon.log 2>/dev/null |
+  tail -n +"$((_log_start + 1))" "$_supervisor_log" 2>/dev/null |
     grep -E 'BPF LSM gate audit event|slow seccomp notification|mount denied|operation=mount|fs_type=' |
     tail -160 >&2 || true
   exit 1
@@ -102,7 +102,7 @@ __assert_bpf_kernel_interface_audit() {
 
   _deadline=$((SECONDS + 15))
   while ((SECONDS <= _deadline)); do
-    _log="$(tail -n +"$((_log_start + 1))" /var/log/nsair-daemon.log 2>/dev/null || true)"
+    _log="$(tail -n +"$((_log_start + 1))" "$_supervisor_log" 2>/dev/null || true)"
     if awk \
       -v _profile="profile=${_profile}" \
       -v _file_name="file_name=${_file_name}" \
@@ -119,7 +119,7 @@ __assert_bpf_kernel_interface_audit() {
   done
 
   echo "missing BPF LSM kernel-interface deny audit for profile=${_profile} file_name=${_file_name}" >&2
-  tail -n +"$((_log_start + 1))" /var/log/nsair-daemon.log 2>/dev/null |
+  tail -n +"$((_log_start + 1))" "$_supervisor_log" 2>/dev/null |
     grep -E 'BPF LSM gate audit event|operation=(file_open|inode_permission)|kernel-interface|file_name=' |
     tail -160 >&2 || true
   exit 1
@@ -154,7 +154,7 @@ __assert_bpf_task_audit() {
 
   _deadline=$((SECONDS + 15))
   while ((SECONDS <= _deadline)); do
-    _log="$(tail -n +"$((_log_start + 1))" /var/log/nsair-daemon.log 2>/dev/null || true)"
+    _log="$(tail -n +"$((_log_start + 1))" "$_supervisor_log" 2>/dev/null || true)"
     if awk \
       -v _operation="operation=${_operation}" \
       -v _reason="reason=${_reason}" \
@@ -169,7 +169,7 @@ __assert_bpf_task_audit() {
   done
 
   echo "missing BPF LSM task deny audit for operation=${_operation} reason=${_reason}" >&2
-  tail -n +"$((_log_start + 1))" /var/log/nsair-daemon.log 2>/dev/null |
+  tail -n +"$((_log_start + 1))" "$_supervisor_log" 2>/dev/null |
     grep -E 'BPF LSM gate audit event|operation=(signal|ptrace)|target_' |
     tail -160 >&2 || true
   exit 1
@@ -180,7 +180,7 @@ __assert_no_bpf_task_audit() {
   local _log
 
   sleep 0.5
-  _log="$(tail -n +"$((_log_start + 1))" /var/log/nsair-daemon.log 2>/dev/null || true)"
+  _log="$(tail -n +"$((_log_start + 1))" "$_supervisor_log" 2>/dev/null || true)"
   if awk \
     'index($0, "BPF LSM gate audit event") &&
 		 (index($0, "operation=signal") || index($0, "operation=ptrace")) &&
@@ -300,7 +300,7 @@ __assert_bpf_xattr_audit() {
 
   _deadline=$((SECONDS + 15))
   while ((SECONDS <= _deadline)); do
-    _log="$(tail -n +"$((_log_start + 1))" /var/log/nsair-daemon.log 2>/dev/null || true)"
+    _log="$(tail -n +"$((_log_start + 1))" "$_supervisor_log" 2>/dev/null || true)"
     if awk \
       -v _profile="profile=${_profile}" \
       -v _operation="operation=${_operation}" \
@@ -318,7 +318,7 @@ __assert_bpf_xattr_audit() {
   done
 
   echo "missing BPF LSM xattr audit for profile=${_profile} operation=${_operation} decision=${_decision} xattr_name=${_xattr_name}" >&2
-  tail -n +"$((_log_start + 1))" /var/log/nsair-daemon.log 2>/dev/null |
+  tail -n +"$((_log_start + 1))" "$_supervisor_log" 2>/dev/null |
     grep -E 'BPF LSM gate audit event|operation=.*xattr|xattr_name=' |
     tail -160 >&2 || true
   exit 1
@@ -347,7 +347,7 @@ __assert_no_bpf_host_audit() {
   local _log
 
   sleep 0.5
-  _log="$(tail -n +"$((_log_start + 1))" /var/log/nsair-daemon.log 2>/dev/null || true)"
+  _log="$(tail -n +"$((_log_start + 1))" "$_supervisor_log" 2>/dev/null || true)"
   if awk \
     -v _marker="xattr_name=${_marker}" \
     'index($0, "BPF LSM gate audit event") && index($0, _marker) { found = 1 }
@@ -363,7 +363,7 @@ __assert_no_bpf_kernel_interface_host_audit() {
   local _log
 
   sleep 0.5
-  _log="$(tail -n +"$((_log_start + 1))" /var/log/nsair-daemon.log 2>/dev/null || true)"
+  _log="$(tail -n +"$((_log_start + 1))" "$_supervisor_log" 2>/dev/null || true)"
   if awk \
     'index($0, "BPF LSM gate audit event") &&
 		 (index($0, "operation=file_open") || index($0, "operation=inode_permission")) &&
@@ -379,7 +379,7 @@ __check_host_bpf_gate_exemption() {
   local _log_start
 
   __log "checking non-Nsair host process BPF gate exemption"
-  _log_start="$(wc -l </var/log/nsair-daemon.log 2>/dev/null || printf '0\n')"
+  _log_start="$(wc -l <"$_supervisor_log" 2>/dev/null || printf '0\n')"
   python3 - <<'PY'
 import os
 import shutil
@@ -410,7 +410,7 @@ __check_host_kernel_interface_gate_exemption() {
   local _log_start
 
   __log "checking non-Nsair host kernel-interface gate exemption"
-  _log_start="$(wc -l </var/log/nsair-daemon.log 2>/dev/null || printf '0\n')"
+  _log_start="$(wc -l <"$_supervisor_log" 2>/dev/null || printf '0\n')"
   python3 - <<'PY'
 import os
 
@@ -436,7 +436,7 @@ __check_host_task_gate_exemption() {
   local _log_start _host_pid
 
   __log "checking non-Nsair host task gate exemption"
-  _log_start="$(wc -l </var/log/nsair-daemon.log 2>/dev/null || printf '0\n')"
+  _log_start="$(wc -l <"$_supervisor_log" 2>/dev/null || printf '0\n')"
   sleep 3600 &
   _host_pid="$!"
   __cleanup() {
@@ -473,10 +473,10 @@ __check_host_target_task_gate() {
     docker rm -f "$_name" >/dev/null 2>&1 || true
   }
 
-  _log_start="$(wc -l </var/log/nsair-daemon.log 2>/dev/null || printf '0\n')"
+  _log_start="$(wc -l <"$_supervisor_log" 2>/dev/null || printf '0\n')"
   __expect_task_op_denied "$_source_cgroup" "$_host_pid" signal
   __assert_bpf_task_audit "$_log_start" signal host-target
-  _log_start="$(wc -l </var/log/nsair-daemon.log 2>/dev/null || printf '0\n')"
+  _log_start="$(wc -l <"$_supervisor_log" 2>/dev/null || printf '0\n')"
   __expect_task_op_denied "$_source_cgroup" "$_host_pid" ptrace
   __assert_bpf_task_audit "$_log_start" ptrace host-target
   __cleanup
@@ -512,10 +512,10 @@ __check_cross_container_task_gate() {
   _target_cgroup="$(__container_cgroup_path "$_name_b")"
   _target_pid="$(__spawn_task_target_in_cgroup "$_target_cgroup" true)"
 
-  _log_start="$(wc -l </var/log/nsair-daemon.log 2>/dev/null || printf '0\n')"
+  _log_start="$(wc -l <"$_supervisor_log" 2>/dev/null || printf '0\n')"
   __expect_task_op_denied "$_source_cgroup" "$_target_pid" signal
   __assert_bpf_task_audit "$_log_start" signal cross-container
-  _log_start="$(wc -l </var/log/nsair-daemon.log 2>/dev/null || printf '0\n')"
+  _log_start="$(wc -l <"$_supervisor_log" 2>/dev/null || printf '0\n')"
   __expect_task_op_denied "$_source_cgroup" "$_target_pid" ptrace
   __assert_bpf_task_audit "$_log_start" ptrace cross-container
   __cleanup
@@ -555,30 +555,30 @@ __run_profile() {
   __log "checking cgroup subtree delegation in ${_name}"
   __run_probe "$_name" cgroup-delegation
   __log "checking privileged resource negative policy in ${_name}"
-  _log_start="$(wc -l </var/log/nsair-daemon.log 2>/dev/null || printf '0\n')"
+  _log_start="$(wc -l <"$_supervisor_log" 2>/dev/null || printf '0\n')"
   __run_probe "$_name" privileged-resource-negative-policy
   __assert_unsafe_mount_audits "$_log_start" "$_profile"
   __log "checking kernel interface file policy in ${_name}"
-  _log_start="$(wc -l </var/log/nsair-daemon.log 2>/dev/null || printf '0\n')"
+  _log_start="$(wc -l <"$_supervisor_log" 2>/dev/null || printf '0\n')"
   _probe_output="$(__run_probe "$_name" kernel-interface-file-policy)"
   printf '%s\n' "$_probe_output"
   __assert_kernel_interface_audits "$_log_start" "$_profile" "$_probe_output"
   __log "checking BPF cgroup subtree mount gate in ${_name}"
-  _log_start="$(wc -l </var/log/nsair-daemon.log 2>/dev/null || printf '0\n')"
+  _log_start="$(wc -l <"$_supervisor_log" 2>/dev/null || printf '0\n')"
   __run_probe "$_name" cgroup-subtree-mount-policy
   __assert_unsafe_mount_audits "$_log_start" "$_profile"
   __log "checking BPF cgroup subtree kernel interface file gate in ${_name}"
-  _log_start="$(wc -l </var/log/nsair-daemon.log 2>/dev/null || printf '0\n')"
+  _log_start="$(wc -l <"$_supervisor_log" 2>/dev/null || printf '0\n')"
   _probe_output="$(__run_probe "$_name" cgroup-subtree-kernel-interface-file-policy)"
   printf '%s\n' "$_probe_output"
   __assert_kernel_interface_audits "$_log_start" "$_profile" "$_probe_output"
   __log "checking xattr negative policy in ${_name}"
-  _log_start="$(wc -l </var/log/nsair-daemon.log 2>/dev/null || printf '0\n')"
+  _log_start="$(wc -l <"$_supervisor_log" 2>/dev/null || printf '0\n')"
   __run_probe "$_name" xattr-negative-policy
   __assert_xattr_negative_audits "$_log_start" "$_profile"
   if [[ "$_profile" == "dind" ]]; then
     __log "checking trusted overlay xattr policy in ${_name}"
-    _log_start="$(wc -l </var/log/nsair-daemon.log 2>/dev/null || printf '0\n')"
+    _log_start="$(wc -l <"$_supervisor_log" 2>/dev/null || printf '0\n')"
     __run_probe "$_name" xattr-trusted-overlay-policy
     __assert_xattr_trusted_overlay_audits "$_log_start" "$_profile"
   fi

@@ -14,6 +14,8 @@ _gate_mode="${NSAIR_GATE_MODE:-ci}"
 _target_platform="${NSAIR_IMAGE_PLATFORM:-linux/amd64}"
 _release_root="${NSAIR_RELEASE_ROOT:-/opt/nsair/releases}"
 _current_link="${NSAIR_CURRENT_LINK:-/opt/nsair/current}"
+_daemon_log="${NSAIR_DAEMON_LOG:-/var/log/nsair-daemon.log}"
+_supervisor_log="${NSAIR_SUPERVISOR_LOG:-/var/log/nsair-supervisor.log}"
 _run_id="${NSAIR_WORKLOAD_RUN_ID:-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}}"
 _resource_id="$(printf '%s' "$_run_id" | tr -c '[:alnum:]_.-' '-')"
 _resource_id="${_resource_id:0:32}"
@@ -57,7 +59,7 @@ __setup_runtime_host() {
 
   __init_ci_dirs
   __install_nsair_binaries
-  __install_nsair_systemd_unit
+  __install_nsair_systemd_units
   __configure_docker_runtime
   __restart_nsair_services
   echo "ci-setup-ok"
@@ -105,6 +107,7 @@ __extract_nsair_binaries_from_image() {
   install -d -m 0755 "$_dest"
   install -m 0755 "${_work_dir}/rootfs/usr/local/bin/nsair-daemon" "${_dest}/nsair-daemon"
   install -m 0755 "${_work_dir}/rootfs/usr/local/bin/nsair-runtime" "${_dest}/nsair-runtime"
+  install -m 0755 "${_work_dir}/rootfs/usr/local/bin/nsair-supervisor" "${_dest}/nsair-supervisor"
   rm -rf "$_work_dir"
 }
 
@@ -125,18 +128,21 @@ __install_nsair_binaries() {
   __extract_nsair_binaries_from_image "$_artifact_bin_dir"
   "${_artifact_bin_dir}/nsair-daemon" version
   "${_artifact_bin_dir}/nsair-runtime" version
+  "${_artifact_bin_dir}/nsair-supervisor" version
 
   __log "installing nsair binaries to ${_release}"
   sudo install -d -m 0755 "${_release}/bin"
   sudo install -m 0755 "${_artifact_bin_dir}/nsair-runtime" "${_release}/bin/nsair-runtime"
   sudo install -m 0755 "${_artifact_bin_dir}/nsair-daemon" "${_release}/bin/nsair-daemon"
+  sudo install -m 0755 "${_artifact_bin_dir}/nsair-supervisor" "${_release}/bin/nsair-supervisor"
   sudo ln -sfn "$_release" "$_current_link"
   sudo ln -sfn "${_current_link}/bin/nsair-runtime" /usr/bin/nsair-runtime
   sudo ln -sfn "${_current_link}/bin/nsair-daemon" /usr/bin/nsair-daemon
+  sudo ln -sfn "${_current_link}/bin/nsair-supervisor" /usr/bin/nsair-supervisor
   sudo rm -f /usr/bin/nsair-runc /usr/bin/nsaird /usr/bin/nsair-policy
 }
 
-__install_nsair_systemd_unit() {
+__install_nsair_systemd_units() {
   case "$_gate_mode" in
   strict | ci) ;;
   *)
@@ -145,18 +151,40 @@ __install_nsair_systemd_unit() {
     ;;
   esac
 
-  __log "installing nsair-daemon systemd unit"
+  __log "installing nsair-supervisor and nsair-daemon systemd units"
   sudo systemctl disable nsaird.service >/dev/null 2>&1 || true
   sudo rm -f /etc/systemd/system/nsaird.service
+  sudo tee /etc/systemd/system/nsair-supervisor.service >/dev/null <<EOF
+[Unit]
+Description=nsair-supervisor (Nsair stable data plane)
+Before=nsair-daemon.service docker.service containerd.service
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/nsair-supervisor --gate-mode ${_gate_mode}
+StandardOutput=append:${_supervisor_log}
+StandardError=append:${_supervisor_log}
+TimeoutStartSec=45
+TimeoutStopSec=90
+StartLimitInterval=0
+NotifyAccess=main
+OOMScoreAdjust=-500
+LimitNOFILE=infinity
+LimitNPROC=infinity
+
+[Install]
+WantedBy=multi-user.target
+EOF
   sudo tee /etc/systemd/system/nsair-daemon.service >/dev/null <<EOF
 [Unit]
-Description=nsair-daemon (Nsair unified daemon)
+Description=nsair-daemon (Nsair control plane)
+Requires=nsair-supervisor.service
+After=nsair-supervisor.service
 Before=docker.service containerd.service
 
 [Service]
 Type=notify
-Environment=NSAIR_GATE_MODE=${_gate_mode}
-ExecStart=/usr/bin/nsair-daemon --log /var/log/nsair-daemon.log --metrics-listen 127.0.0.1:9618
+ExecStart=/usr/bin/nsair-daemon --log ${_daemon_log} --metrics-listen 127.0.0.1:9618
 TimeoutStartSec=45
 TimeoutStopSec=90
 StartLimitInterval=0
@@ -169,7 +197,7 @@ LimitNPROC=infinity
 WantedBy=multi-user.target
 EOF
   sudo systemctl daemon-reload
-  sudo systemctl enable nsair-daemon.service >/dev/null
+  sudo systemctl enable nsair-supervisor.service nsair-daemon.service >/dev/null
 }
 
 __configure_docker_runtime() {
@@ -207,22 +235,26 @@ __configure_docker_runtime() {
 }
 
 __restart_nsair_services() {
-  __log "restarting nsair-daemon and docker"
+  __log "restarting nsair-supervisor, nsair-daemon, and docker"
   docker ps -a --format '{{.Names}}' |
     awk '/^nsair-(docker-in-docker|kubernetes-k3s|systemd-pid1|procfs-memory|procfs-cpu|seccomp-notify-concurrency|container-security-policy)/ { print }' |
     xargs -r docker rm -f >/dev/null 2>&1 || true
-  sudo truncate -s 0 /var/log/nsair-daemon.log 2>/dev/null || sudo install -m 0600 /dev/null /var/log/nsair-daemon.log
-  sudo systemctl reset-failed docker.service nsair-daemon.service nsaird.service || true
+  sudo truncate -s 0 "$_daemon_log" 2>/dev/null || sudo install -m 0600 /dev/null "$_daemon_log"
+  sudo truncate -s 0 "$_supervisor_log" 2>/dev/null || sudo install -m 0600 /dev/null "$_supervisor_log"
+  sudo systemctl reset-failed docker.service nsair-daemon.service nsair-supervisor.service nsaird.service || true
   sudo systemctl stop nsair-daemon.service nsaird.service || true
+  sudo systemctl stop nsair-supervisor.service || true
   while read -r _mp; do
     [[ -n "$_mp" ]] || continue
     sudo umount -l "$_mp" || true
   done < <(awk '$0 ~ / - fuse nsairfs / && $5 ~ /^\/var\/lib\/nsairfs\// {print $5}' /proc/self/mountinfo)
-  sudo rm -f /run/nsair/daemon.sock /run/nsair/nsaird.sock /run/nsair/seccomp-notify.sock /run/nsair/daemon.pid /run/nsair/nsaird.pid
+  sudo rm -f /run/nsair/daemon.sock /run/nsair/supervisor.sock /run/nsair/nsaird.sock /run/nsair/seccomp-notify.sock /run/nsair/daemon.pid /run/nsair/supervisor.pid /run/nsair/nsaird.pid
   sudo rm -rf /run/nsair/sessions
   if sudo test -d /var/lib/nsairfs; then
     sudo find /var/lib/nsairfs -mindepth 1 -maxdepth 1 -xdev -exec rm -rf -- {} + 2>/dev/null || true
   fi
+  sudo systemctl restart nsair-supervisor.service
+  sudo systemctl is-active --quiet nsair-supervisor.service
   sudo systemctl restart nsair-daemon.service
   sudo systemctl is-active --quiet nsair-daemon.service
   sudo systemctl restart docker
@@ -231,6 +263,8 @@ __restart_nsair_services() {
 
 __verify_gate() {
   sudo systemctl is-active --quiet nsair-daemon.service
+  sudo systemctl is-active --quiet nsair-supervisor.service
+  sudo systemctl cat nsair-supervisor.service
   sudo systemctl cat nsair-daemon.service
   sudo nsair-daemon gate status
   sudo nsair-daemon gate status | jq -e '.mode == "ci" and .enforce == false'
@@ -238,10 +272,11 @@ __verify_gate() {
 
 __assert_nsair_ready() {
   __log "checking nsair services"
+  sudo systemctl is-active --quiet nsair-supervisor.service
   sudo systemctl is-active --quiet nsair-daemon.service
-  sudo grep -q "Ready ..." /var/log/nsair-daemon.log
-  ! sudo grep -q "ID-mapped mounts are required" /var/log/nsair-daemon.log
-  ! sudo grep -q "overlayfs on ID-mapped mounts is required" /var/log/nsair-daemon.log
+  sudo grep -q "Ready ..." "$_daemon_log"
+  ! sudo grep -q "ID-mapped mounts are required" "$_daemon_log"
+  ! sudo grep -q "overlayfs on ID-mapped mounts is required" "$_daemon_log"
   docker info --format '{{json .Runtimes}}' | jq -e 'has("nsair-runtime")' >/dev/null
 }
 
@@ -291,14 +326,18 @@ __collect_logs() {
     for _container in $(docker ps -a --format '{{.Names}}' | awk '/^nsair-/ { print }'); do
       docker logs "$_container" || true
     done
-    sudo systemctl --no-pager --full status docker.service nsair-daemon.service || true
-    sudo systemctl cat nsair-daemon.service || true
+    sudo systemctl --no-pager --full status docker.service nsair-supervisor.service nsair-daemon.service || true
+    sudo systemctl cat nsair-supervisor.service nsair-daemon.service || true
     sudo nsair-daemon gate status || true
-    sudo journalctl --no-pager -u docker.service -u nsair-daemon.service || true
+    sudo journalctl --no-pager -u docker.service -u nsair-supervisor.service -u nsair-daemon.service || true
   } 2>&1 | sudo tee "${_log_dir}/host-diagnostics.log" >/dev/null
-  if sudo test -f /var/log/nsair-daemon.log; then
-    sudo cp /var/log/nsair-daemon.log "${_log_dir}/nsair-daemon.log"
+  if sudo test -f "$_daemon_log"; then
+    sudo cp "$_daemon_log" "${_log_dir}/nsair-daemon.log"
     sudo chmod 0644 "${_log_dir}/nsair-daemon.log"
+  fi
+  if sudo test -f "$_supervisor_log"; then
+    sudo cp "$_supervisor_log" "${_log_dir}/nsair-supervisor.log"
+    sudo chmod 0644 "${_log_dir}/nsair-supervisor.log"
   fi
 }
 
