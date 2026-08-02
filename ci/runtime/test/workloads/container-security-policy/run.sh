@@ -15,16 +15,16 @@ source "${_workload_dir}/library/images.sh"
 
 __state_json() {
   local _name="$1"
-  local _cid _state_file _runtime_root
+  local _cid _state_file
+  local _runtime_root="/run/nsair/runtime"
 
   _cid="$(docker inspect "$_name" --format '{{.Id}}')"
-  _state_file="$(find /run -xdev -type f -path "*/${_cid}/state.json" -print -quit)"
-  if [[ -z "$_state_file" ]]; then
+  _state_file="${_runtime_root}/${_cid}/state.json"
+  if ! sudo test -f "$_state_file"; then
     echo "failed to locate nsair-runtime state.json for ${_name} (${_cid})" >&2
     exit 1
   fi
-  _runtime_root="$(dirname "$(dirname "$_state_file")")"
-  nsair-runtime --root "$_runtime_root" state "$_cid"
+  sudo nsair-runtime --root "$_runtime_root" state "$_cid"
 }
 
 __check_devices() {
