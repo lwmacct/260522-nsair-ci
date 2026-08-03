@@ -34,6 +34,7 @@ _oci_base_image="${NSAIR_CI_OCI_BASE_IMAGE:-docker.io/library/busybox:1.37.0}"
 _oci_runtime_root="${NSAIR_CI_OCI_RUNTIME_ROOT:-/run/nsair/runtime}"
 _oci_lifecycle_id="${NSAIR_CI_OCI_LIFECYCLE_ID:-oci-lifecycle${_workload_resource_id:+-${_workload_resource_id}}}"
 _resource_update_id="${NSAIR_CI_RESOURCE_UPDATE_ID:-resource-update${_workload_resource_id:+-${_workload_resource_id}}}"
+_storage_lifecycle_id="${NSAIR_CI_STORAGE_LIFECYCLE_ID:-storage-lifecycle${_workload_resource_id:+-${_workload_resource_id}}}"
 _daemon_fail_stop_id="${NSAIR_CI_DAEMON_FAIL_STOP_ID:-daemon-fail-stop${_workload_resource_id:+-${_workload_resource_id}}}"
 _daemon_dial_retry_id="${NSAIR_CI_DAEMON_DIAL_RETRY_ID:-daemon-dial-retry${_workload_resource_id:+-${_workload_resource_id}}}"
 
