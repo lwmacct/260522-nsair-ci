@@ -36,7 +36,7 @@ __main() {
   docker run --rm \
     --name "$_procfs_memory_name" \
     --hostname "$_procfs_memory_name" \
-    --runtime nsair-runtime \
+    --runtime nsair \
     --cgroupns=private \
     --memory "$_procfs_memory_memory_bytes" \
     --memory-swap "$_procfs_memory_memory_bytes" \
@@ -50,7 +50,7 @@ __main() {
   docker run --rm \
     --name "${_procfs_memory_name}-swap" \
     --hostname "${_procfs_memory_name}-swap" \
-    --runtime nsair-runtime \
+    --runtime nsair \
     --cgroupns=private \
     --memory "$_procfs_memory_memory_bytes" \
     --memory-swap "$_procfs_memory_swap_bytes" \

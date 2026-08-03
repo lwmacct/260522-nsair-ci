@@ -33,7 +33,7 @@ __main() {
   docker run --rm \
     --name "${_procfs_cpu_name}-nolimit" \
     --hostname "${_procfs_cpu_name}-nolimit" \
-    --runtime nsair-runtime \
+    --runtime nsair \
     --cgroupns=private \
     --label io.backend.security.profile=default \
     -e "CI_PROCFS_CPU_EXPECT_VISIBLE_FROM_AFFINITY=1" \
@@ -44,7 +44,7 @@ __main() {
   docker run --rm \
     --name "$_procfs_cpu_name" \
     --hostname "$_procfs_cpu_name" \
-    --runtime nsair-runtime \
+    --runtime nsair \
     --cgroupns=private \
     --cpus "$_procfs_cpu_quota_cpus" \
     --label io.backend.security.profile=default \
@@ -63,7 +63,7 @@ __main() {
   docker run --rm \
     --name "${_procfs_cpu_name}-idle-isolation" \
     --hostname "${_procfs_cpu_name}-idle-isolation" \
-    --runtime nsair-runtime \
+    --runtime nsair \
     --cgroupns=private \
     --cpus "$_procfs_cpu_quota_cpus" \
     --label io.backend.security.profile=default \

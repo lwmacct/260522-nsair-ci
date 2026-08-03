@@ -58,11 +58,11 @@ __main() {
 	install -d -m 0755 "$_root"
 	__build_ci_image "$_systemd_pid1_image" "${_workload_dir}/workloads/systemd-pid1" --build-arg "BASE_IMAGE=${_systemd_pid1_base_image}"
 
-	__log "running systemd as pid 1 under nsair-runtime"
+	__log "running systemd as pid 1 under nsair"
 	docker run -d \
 		--name "$_systemd_pid1_name" \
 		--hostname "$_systemd_pid1_name" \
-		--runtime nsair-runtime \
+		--runtime nsair \
 		--cgroupns=private \
 		--label io.backend.security.profile=default \
 		--entrypoint /usr/bin/systemd \

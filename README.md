@@ -30,6 +30,5 @@ The default group runs `procfs-cpu`, `procfs-memory`, and
 
 The workflow is manual-only. It does not need access to the private Nsair
 source repository. It installs ORAS, fetches the selected linux/amd64 image
-manifest and layers, extracts `/usr/local/bin/nsair-runtime` and
-`/usr/local/bin/nsair-daemon`, then installs the two binaries and the
-nsair-daemon systemd unit on the runner.
+manifest and layers, extracts `/usr/local/bin/nsair`, then installs the binary
+and the `nsair-daemon.service` systemd unit on the runner.

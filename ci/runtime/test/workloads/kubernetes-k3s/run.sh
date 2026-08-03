@@ -81,11 +81,11 @@ __main() {
   __build_ci_image "$_inner_nginx_image" "${_workload_path}" -f "${_workload_path}/nginx.Dockerfile" --build-arg "BASE_IMAGE=${_inner_nginx_base_image}"
   __prepare
 
-  __log "starting k3s Kubernetes node under nsair-runtime"
+  __log "starting k3s Kubernetes node under nsair"
   docker run -d \
     --name "$_kubernetes_k3s_name" \
     --hostname "$_kubernetes_k3s_name" \
-    --runtime nsair-runtime \
+    --runtime nsair \
     --cgroupns=private \
     --annotation io.backend.security.profile=k8s-node \
     --label io.backend.security.profile=k8s-node \

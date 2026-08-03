@@ -16,7 +16,7 @@ source "${_workload_dir}/library/images.sh"
 _bpf_lsm_active=false
 
 __detect_bpf_lsm() {
-  if sudo nsair-daemon gate status |
+  if sudo nsair daemon gate status |
     jq -e '.enabled == true and .features.lsmActive == true and .auditEnabled == true' >/dev/null; then
     _bpf_lsm_active=true
     __log "BPF LSM policy and audit checks enabled"
@@ -31,18 +31,18 @@ __state_json() {
   local _cid _runtime_root
   local -a _runtime_roots=(
     /run/docker/runtime-runc/moby
-    /run/docker/runtime-runc/nsair-runtime
+    /run/docker/runtime-runc/nsair
     /run/nsair/runtime
   )
 
   _cid="$(docker inspect "$_name" --format '{{.Id}}')"
   for _runtime_root in "${_runtime_roots[@]}"; do
     if sudo test -f "${_runtime_root}/${_cid}/state.json"; then
-      sudo nsair-runtime --root "$_runtime_root" state "$_cid"
+      sudo nsair --root "$_runtime_root" state "$_cid"
       return
     fi
   done
-  echo "failed to locate nsair-runtime state.json for ${_name} (${_cid})" >&2
+  echo "failed to locate nsair state.json for ${_name} (${_cid})" >&2
   exit 1
 }
 
@@ -53,7 +53,7 @@ __check_devices() {
   __log "checking cgroup device policy diagnostics for ${_name}"
   _state_json="$(__state_json "$_name")"
   if ! grep -q '"cgroup_device_policy": {' <<<"$_state_json"; then
-    echo "nsair-runtime state did not expose cgroup_device_policy for ${_name}" >&2
+    echo "nsair state did not expose cgroup_device_policy for ${_name}" >&2
     printf '%s\n' "$_state_json" >&2
     exit 1
   fi
@@ -513,7 +513,7 @@ __check_host_target_task_gate() {
   docker run -d \
     --name "$_name" \
     --hostname "$_name" \
-    --runtime nsair-runtime \
+    --runtime nsair \
     --cgroupns=private \
     --cap-add SYS_PTRACE \
     --cap-add KILL \
@@ -556,7 +556,7 @@ __check_cross_container_task_gate() {
     docker run -d \
       --name "$_name" \
       --hostname "$_name" \
-      --runtime nsair-runtime \
+      --runtime nsair \
       --cgroupns=private \
       --cap-add SYS_PTRACE \
       --cap-add KILL \
@@ -583,8 +583,8 @@ __check_proc_sys() {
   local _host_global_deny_sysctls _real_namespaced_sysctls
 
   __log "checking proc sys security policy for ${_name} (${_profile})"
-  _host_global_deny_sysctls="$(nsair-daemon policy sysctl-list --profile "$_profile" --kind host-global-deny | tr '\n' ' ')"
-  _real_namespaced_sysctls="$(nsair-daemon policy sysctl-list --profile "$_profile" --kind real-namespaced | tr '\n' ' ')"
+  _host_global_deny_sysctls="$(nsair daemon policy sysctl-list --profile "$_profile" --kind host-global-deny | tr '\n' ' ')"
+  _real_namespaced_sysctls="$(nsair daemon policy sysctl-list --profile "$_profile" --kind real-namespaced | tr '\n' ' ')"
   docker exec \
     -e "host_global_deny_sysctls=${_host_global_deny_sysctls}" \
     -e "real_namespaced_sysctls=${_real_namespaced_sysctls}" \
@@ -600,7 +600,7 @@ __run_profile() {
   docker run -d \
     --name "$_name" \
     --hostname "$_name" \
-    --runtime nsair-runtime \
+    --runtime nsair \
     --cgroupns=private \
     --cap-add SYS_ADMIN \
     --annotation "io.backend.security.profile=${_profile}" \

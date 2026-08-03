@@ -34,7 +34,7 @@ services:
     hostname: ${_docker_in_docker_name}
     image: "${_docker_in_docker_image}"
     restart: "no"
-    runtime: nsair-runtime
+    runtime: nsair
     privileged: false
     annotations:
       io.backend.security.profile: dind

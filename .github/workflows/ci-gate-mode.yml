@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       nsair_image:
-        description: Public Nsair image containing runtime and daemon
+        description: Public image containing the Nsair multi-role binary
         required: true
         default: ghcr.io/lwmacct/260522-nsair:latest
         type: string
@@ -165,6 +165,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: nsair-runtime-${{ matrix.workload }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: nsair-${{ matrix.workload }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.NSAIR_CI_TEST_ROOT }}/runs/**/*.log
           if-no-files-found: ignore

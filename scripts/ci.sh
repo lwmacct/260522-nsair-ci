@@ -57,7 +57,7 @@ __setup_runtime_host() {
   __require_cmd oras
 
   __init_ci_dirs
-  __install_nsair_binaries
+  __install_nsair_binary
   __install_nsair_systemd_units
   __configure_docker_runtime
   __restart_nsair_services
@@ -81,7 +81,7 @@ __image_repo() {
   printf '%s' "$_repo"
 }
 
-__extract_nsair_binaries_from_image() {
+__extract_nsair_binary_from_image() {
   local _dest="$1"
   local _work_dir _manifest _repo _digest _layer _i
 
@@ -104,17 +104,16 @@ __extract_nsair_binaries_from_image() {
   done < <(jq -r '.layers[].digest' "$_manifest")
 
   install -d -m 0755 "$_dest"
-  install -m 0755 "${_work_dir}/rootfs/usr/local/bin/nsair-daemon" "${_dest}/nsair-daemon"
-  install -m 0755 "${_work_dir}/rootfs/usr/local/bin/nsair-runtime" "${_dest}/nsair-runtime"
+  install -m 0755 "${_work_dir}/rootfs/usr/local/bin/nsair" "${_dest}/nsair"
   rm -rf "$_work_dir"
 }
 
-__install_nsair_binaries() {
-  local _release _artifact_bin_dir
+__install_nsair_binary() {
+  local _release _artifact_bin_dir _next_link
   _release="${_release_root}/$(date +%Y%m%d%H%M%S)-ci"
   _artifact_bin_dir="${_test_root}/nsair-bin"
 
-  __log "removing previous validation containers before installing binaries"
+  __log "removing previous validation containers before installing nsair"
   docker ps -a --format '{{.Names}}' |
     awk '/^nsair-(docker-in-docker|kubernetes-k3s|systemd-pid1|procfs-memory|procfs-cpu|seccomp-notify-concurrency|container-security-policy)/ { print }' |
     xargs -r docker rm -f >/dev/null 2>&1 || true
@@ -123,18 +122,17 @@ __install_nsair_binaries() {
     xargs -r docker network rm >/dev/null 2>&1 || true
 
   rm -rf "$_artifact_bin_dir"
-  __extract_nsair_binaries_from_image "$_artifact_bin_dir"
-  "${_artifact_bin_dir}/nsair-daemon" version
-  "${_artifact_bin_dir}/nsair-runtime" version
+  __extract_nsair_binary_from_image "$_artifact_bin_dir"
+  "${_artifact_bin_dir}/nsair" version
 
-  __log "installing nsair binaries to ${_release}"
+  __log "installing nsair to ${_release}"
   sudo install -d -m 0755 "${_release}/bin"
-  sudo install -m 0755 "${_artifact_bin_dir}/nsair-runtime" "${_release}/bin/nsair-runtime"
-  sudo install -m 0755 "${_artifact_bin_dir}/nsair-daemon" "${_release}/bin/nsair-daemon"
-  sudo ln -sfn "$_release" "$_current_link"
-  sudo ln -sfn "${_current_link}/bin/nsair-runtime" /usr/bin/nsair-runtime
-  sudo ln -sfn "${_current_link}/bin/nsair-daemon" /usr/bin/nsair-daemon
-  sudo rm -f /usr/bin/nsair-runc /usr/bin/nsaird /usr/bin/nsair-policy /usr/bin/nsair-supervisor
+  sudo install -m 0755 "${_artifact_bin_dir}/nsair" "${_release}/bin/nsair"
+  _next_link="${_current_link}.next"
+  sudo rm -f "$_next_link"
+  sudo ln -s "$_release" "$_next_link"
+  sudo mv -Tf "$_next_link" "$_current_link"
+  sudo ln -sfn "${_current_link}/bin/nsair" /usr/bin/nsair
 }
 
 __install_nsair_systemd_units() {
@@ -147,10 +145,6 @@ __install_nsair_systemd_units() {
   esac
 
   __log "installing nsair-daemon systemd unit"
-  sudo systemctl disable nsaird.service >/dev/null 2>&1 || true
-  sudo rm -f /etc/systemd/system/nsaird.service
-  sudo systemctl disable --now nsair-supervisor.service >/dev/null 2>&1 || true
-  sudo rm -f /etc/systemd/system/nsair-supervisor.service
   sudo tee /etc/systemd/system/nsair-daemon.service >/dev/null <<EOF
 [Unit]
 Description=nsair-daemon (Nsair control and data plane)
@@ -158,7 +152,7 @@ Before=docker.service containerd.service
 
 [Service]
 Type=notify
-ExecStart=/usr/bin/nsair-daemon --log ${_daemon_log} --gate-mode ${_gate_mode} --metrics-listen 127.0.0.1:9618
+ExecStart=/usr/bin/nsair daemon --log ${_daemon_log} --gate-mode ${_gate_mode} --metrics-listen 127.0.0.1:9618
 TimeoutStartSec=45
 TimeoutStopSec=90
 StartLimitInterval=0
@@ -178,7 +172,7 @@ __configure_docker_runtime() {
   local _daemon_config="/etc/docker/daemon.json"
   local _tmp_config
 
-  __log "configuring docker nsair-runtime"
+  __log "configuring docker nsair"
   sudo install -d -m 0755 /etc/docker
   _tmp_config="$(mktemp)"
   if sudo test -s "$_daemon_config"; then
@@ -187,9 +181,8 @@ __configure_docker_runtime() {
 				error("docker daemon config must be a JSON object")
 			else
 				.runtimes = ((.runtimes // {})
-					| del(."mosbox-runc", ."mosbox-runtime")
-					| .["nsair-runtime"] = {
-						"path": "/usr/bin/nsair-runtime",
+					| .["nsair"] = {
+						"path": "/usr/bin/nsair",
 						"runtimeArgs": []
 					})
 			end
@@ -197,8 +190,8 @@ __configure_docker_runtime() {
   else
     jq -n '{
 			"runtimes": {
-				"nsair-runtime": {
-					"path": "/usr/bin/nsair-runtime",
+				"nsair": {
+					"path": "/usr/bin/nsair",
 					"runtimeArgs": []
 				}
 			}
@@ -214,14 +207,14 @@ __restart_nsair_services() {
     awk '/^nsair-(docker-in-docker|kubernetes-k3s|systemd-pid1|procfs-memory|procfs-cpu|seccomp-notify-concurrency|container-security-policy)/ { print }' |
     xargs -r docker rm -f >/dev/null 2>&1 || true
   sudo truncate -s 0 "$_daemon_log" 2>/dev/null || sudo install -m 0600 /dev/null "$_daemon_log"
-  sudo systemctl reset-failed docker.service nsair-daemon.service nsaird.service || true
-  sudo systemctl stop nsair-daemon.service nsaird.service || true
+  sudo systemctl reset-failed docker.service nsair-daemon.service || true
+  sudo systemctl stop nsair-daemon.service || true
   while read -r _mp; do
     [[ -n "$_mp" ]] || continue
     sudo umount -l "$_mp" || true
   done < <(awk '$0 ~ / - fuse nsairfs / && $5 ~ /^\/var\/lib\/nsairfs\// {print $5}' /proc/self/mountinfo)
-  sudo rm -f /run/nsair/daemon.sock /run/nsair/supervisor.sock /run/nsair/nsaird.sock /run/nsair/seccomp-notify.sock /run/nsair/daemon.pid /run/nsair/supervisor.pid /run/nsair/nsaird.pid
-  sudo rm -rf /run/nsair/sessions
+  sudo rm -f /run/nsair/daemon.sock /run/nsair/daemon.pid
+  sudo rm -rf /run/nsair/containers
   if sudo test -d /var/lib/nsairfs; then
     sudo find /var/lib/nsairfs -mindepth 1 -maxdepth 1 -xdev -exec rm -rf -- {} + 2>/dev/null || true
   fi
@@ -234,8 +227,8 @@ __restart_nsair_services() {
 __verify_gate() {
   sudo systemctl is-active --quiet nsair-daemon.service
   sudo systemctl cat nsair-daemon.service
-  sudo nsair-daemon gate status
-  sudo nsair-daemon gate status | jq -e '.mode == "ci" and .enforce == false'
+  sudo nsair daemon gate status
+  sudo nsair daemon gate status | jq -e '.mode == "ci" and .enforce == false'
 }
 
 __assert_nsair_ready() {
@@ -244,7 +237,7 @@ __assert_nsair_ready() {
   sudo grep -q "Ready ..." "$_daemon_log"
   ! sudo grep -q "ID-mapped mounts are required" "$_daemon_log"
   ! sudo grep -q "overlayfs on ID-mapped mounts is required" "$_daemon_log"
-  docker info --format '{{json .Runtimes}}' | jq -e 'has("nsair-runtime")' >/dev/null
+  docker info --format '{{json .Runtimes}}' | jq -e 'has("nsair")' >/dev/null
 }
 
 __run_workload() {
@@ -295,7 +288,7 @@ __collect_logs() {
     done
     sudo systemctl --no-pager --full status docker.service nsair-daemon.service || true
     sudo systemctl cat nsair-daemon.service || true
-    sudo nsair-daemon gate status || true
+    sudo nsair daemon gate status || true
     sudo journalctl --no-pager -u docker.service -u nsair-daemon.service || true
   } 2>&1 | sudo tee "${_log_dir}/host-diagnostics.log" >/dev/null
   if sudo test -f "$_daemon_log"; then

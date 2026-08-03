@@ -32,7 +32,7 @@ __main() {
 	docker run --rm \
 		--name "$_seccomp_notify_concurrency_name" \
 		--hostname "$_seccomp_notify_concurrency_name" \
-		--runtime nsair-runtime \
+		--runtime nsair \
 		--cgroupns=private \
 		--label io.backend.security.profile=default \
 		-e "CI_SECCOMP_NOTIFY_CONCURRENCY_PROCESSES=${_seccomp_notify_concurrency_processes}" \
