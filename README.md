@@ -27,7 +27,9 @@ artifact. A manual run may provide a space-separated `workloads` value to
 isolate one or more failing workloads; an empty value always means the full
 suite.
 
-The workflow can be invoked manually or used as a release-gating reusable
-workflow. It installs ORAS, fetches the selected linux/amd64 image manifest and
-layers, extracts `/usr/local/bin/nsair`, then installs the binary and the
+The workflow is always started through `workflow_dispatch`, either manually or
+asynchronously by the product release workflow. The run and its billing, matrix
+jobs, logs, and artifacts therefore remain in this public repository. It
+installs ORAS, fetches the selected linux/amd64 image manifest and layers,
+extracts `/usr/local/bin/nsair`, then installs the binary and the
 `nsair-daemon.service` systemd unit on the runner.
