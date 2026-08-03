@@ -29,7 +29,6 @@ _image_cache_dir="${NSAIR_CI_IMAGE_CACHE_DIR:-${_test_root}/images}"
 _volume_root="${NSAIR_CI_VOLUME_ROOT:-${_workload_run_root}/volumes}"
 _log_root="${NSAIR_CI_LOG_ROOT:-${_workload_run_root}/logs}"
 _daemon_log="${NSAIR_DAEMON_LOG:-/var/log/nsair-daemon.log}"
-_supervisor_log="${NSAIR_SUPERVISOR_LOG:-/var/log/nsair-supervisor.log}"
 
 _docker_in_docker_name="${NSAIR_CI_DOCKER_IN_DOCKER_NAME:-nsair-docker-in-docker${_workload_resource_id:+-${_workload_resource_id}}}"
 _docker_in_docker_network="${NSAIR_CI_DOCKER_IN_DOCKER_NETWORK:-nsair-docker-in-docker${_workload_resource_id:+-${_workload_resource_id}}}"

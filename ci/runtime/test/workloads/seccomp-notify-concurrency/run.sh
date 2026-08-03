@@ -24,7 +24,7 @@ __main() {
 	__assert_nsair_ready
 	__init_ci_dirs
 
-	_log_start="$(wc -l <"$_supervisor_log" 2>/dev/null || printf '0\n')"
+	_log_start="$(wc -l <"$_daemon_log" 2>/dev/null || printf '0\n')"
 	docker rm -f "$_seccomp_notify_concurrency_name" >/dev/null 2>&1 || true
 	__build_ci_image "$_seccomp_notify_concurrency_image" "${_workload_dir}/workloads/seccomp-notify-concurrency" --build-arg "BASE_IMAGE=${_seccomp_notify_concurrency_base_image}"
 
@@ -42,9 +42,9 @@ __main() {
 		"$_seccomp_notify_concurrency_image"
 
 	__log "checking seccomp notify concurrency diagnostics"
-	if tail -n +"$((_log_start + 1))" "$_supervisor_log" 2>/dev/null |
+	if tail -n +"$((_log_start + 1))" "$_daemon_log" 2>/dev/null |
 		grep -E "Seccomp notification timed out|nsenter broker concurrency limit reached|in-flight limit reached|dispatcher queue full|invalid tracee|seccomp response already sent" >&2; then
-		echo "seccomp notify concurrency workload produced forbidden Supervisor diagnostics" >&2
+		echo "seccomp notify concurrency workload produced forbidden daemon diagnostics" >&2
 		exit 1
 	fi
 

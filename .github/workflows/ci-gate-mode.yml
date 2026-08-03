@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       nsair_image:
-        description: Public Nsair image containing runtime, daemon, and Supervisor
+        description: Public Nsair image containing runtime and daemon
         required: true
         default: ghcr.io/lwmacct/260522-nsair:latest
         type: string
