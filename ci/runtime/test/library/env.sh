@@ -32,7 +32,7 @@ _daemon_log="${NSAIR_DAEMON_LOG:-/var/log/nsair-daemon.log}"
 
 _docker_in_docker_name="${NSAIR_CI_DOCKER_IN_DOCKER_NAME:-nsair-docker-in-docker${_workload_resource_id:+-${_workload_resource_id}}}"
 _docker_in_docker_network="${NSAIR_CI_DOCKER_IN_DOCKER_NETWORK:-nsair-docker-in-docker${_workload_resource_id:+-${_workload_resource_id}}}"
-_docker_in_docker_base_image="${NSAIR_CI_DOCKER_IN_DOCKER_BASE_IMAGE:-ghcr.io/lwmacct/250210-cr-docker:v0.10.260731}"
+_docker_in_docker_base_image="${NSAIR_CI_DOCKER_IN_DOCKER_BASE_IMAGE:-ghcr.io/lwmacct/250210-cr-docker:latest}"
 _docker_in_docker_image="${NSAIR_CI_DOCKER_IN_DOCKER_IMAGE:-$(__image_tag nsair-ci/docker-in-docker latest)}"
 
 _container_security_policy_name="${NSAIR_CI_CONTAINER_SECURITY_POLICY_NAME:-nsair-container-security-policy${_workload_resource_id:+-${_workload_resource_id}}}"
