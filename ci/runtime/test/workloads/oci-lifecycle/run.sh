@@ -63,7 +63,7 @@ __host_cgroup_path() {
 }
 
 __main() {
-  local _pid _cgroup _exec_output
+  local _pid _cgroup _exec_output _stats_output
 
   if [[ "${1:-}" == "cleanup" ]]; then
     __cleanup
@@ -102,20 +102,38 @@ __main() {
   __assert_state running
   _exec_output="$(sudo nsair --root "$_oci_runtime_root" exec \
     "$_oci_lifecycle_id" /bin/sh -c 'printf oci-exec-ok')"
-  [[ "$_exec_output" == "oci-exec-ok" ]]
-  sudo nsair --root "$_oci_runtime_root" events --stats "$_oci_lifecycle_id" |
-    jq -e --arg _id "$_oci_lifecycle_id" \
-      '.type == "stats" and .id == $_id and .data.pids.current >= 1' >/dev/null
+  printf 'oci-exec-output=%q\n' "$_exec_output"
+  if [[ "$_exec_output" != "oci-exec-ok" ]]; then
+    echo "unexpected OCI exec output" >&2
+    exit 1
+  fi
+  _stats_output="$(sudo nsair --root "$_oci_runtime_root" events --stats "$_oci_lifecycle_id")"
+  printf 'oci-stats=%s\n' "$_stats_output"
+  if ! jq -e --arg _id "$_oci_lifecycle_id" \
+    '.type == "stats" and .id == $_id and .data.pids.current >= 1' \
+    <<<"$_stats_output" >/dev/null; then
+    echo "OCI stats did not report the running init process" >&2
+    exit 1
+  fi
 
   _cgroup="$(__host_cgroup_path "$_pid")"
   sudo test -f "${_cgroup}/cgroup.freeze"
   sudo nsair --root "$_oci_runtime_root" pause "$_oci_lifecycle_id"
   __assert_state paused
-  [[ "$(sudo cat "${_cgroup}/cgroup.freeze")" == "1" ]]
+  if [[ "$(sudo cat "${_cgroup}/cgroup.freeze")" != "1" ]]; then
+    echo "cgroup.freeze did not report a paused cgroup" >&2
+    exit 1
+  fi
   sudo nsair --root "$_oci_runtime_root" resume "$_oci_lifecycle_id"
   __assert_state running
-  [[ "$(sudo cat "${_cgroup}/cgroup.freeze")" == "0" ]]
-  [[ "$(__state | jq -r '.pid')" == "$_pid" ]]
+  if [[ "$(sudo cat "${_cgroup}/cgroup.freeze")" != "0" ]]; then
+    echo "cgroup.freeze did not report a resumed cgroup" >&2
+    exit 1
+  fi
+  if [[ "$(__state | jq -r '.pid')" != "$_pid" ]]; then
+    echo "container init PID changed across pause and resume" >&2
+    exit 1
+  fi
 
   __log "validating stop and complete resource release"
   sudo nsair --root "$_oci_runtime_root" kill "$_oci_lifecycle_id" TERM
