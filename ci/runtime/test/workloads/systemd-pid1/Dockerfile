@@ -56,7 +56,7 @@ RUN set -eux; \
 	chmod +x /usr/local/bin/nscell-ci-systemd-pid1-probe; \
 	cat >/etc/systemd/system/nscell-ci-probe.service <<'EOF'
 [Unit]
-Description=Nscell CI systemd probe
+Description=NSCell CI systemd probe
 After=local-fs.target
 
 [Service]

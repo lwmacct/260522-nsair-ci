@@ -15,7 +15,7 @@ only the resources needed by runtime validation:
 When manually dispatching the workflow, enable `debug_tmate` to open an SSH
 session on the GitHub-hosted runner before the probe runs.
 
-`Nscell CI Gate Mode` validates binaries extracted from a public GHCR image,
+`NSCell CI Gate Mode` validates binaries extracted from a public GHCR image,
 for example `ghcr.io/lwmacct/260522-nscell:v0.33.260701`. The runtime setup,
 gate check, diagnostics, and workload flow live in this repository under
 `scripts/ci.sh` and `ci/runtime/test/`.

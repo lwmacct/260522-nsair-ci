@@ -337,11 +337,11 @@ __expect_task_op_denied() {
   _status="$?"
   set -e
   if [[ "$_status" -eq 0 ]]; then
-    echo "Nscell task operation ${_operation} unexpectedly succeeded" >&2
+    echo "NSCell task operation ${_operation} unexpectedly succeeded" >&2
     exit 1
   fi
   if [[ "$_status" -ne 1 ]]; then
-    echo "Nscell task operation ${_operation} failed with status ${_status}, want EPERM status 1" >&2
+    echo "NSCell task operation ${_operation} failed with status ${_status}, want EPERM status 1" >&2
     exit 1
   fi
 }
@@ -434,7 +434,7 @@ __assert_no_bpf_kernel_interface_host_audit() {
 __check_host_bpf_gate_exemption() {
   local _log_start
 
-  __log "checking non-Nscell host process BPF gate exemption"
+  __log "checking non-NSCell host process BPF gate exemption"
   _log_start="$(wc -l <"$_daemon_log" 2>/dev/null || printf '0\n')"
   python3 - <<'PY'
 import os
@@ -465,7 +465,7 @@ PY
 __check_host_kernel_interface_gate_exemption() {
   local _log_start
 
-  __log "checking non-Nscell host kernel-interface gate exemption"
+  __log "checking non-NSCell host kernel-interface gate exemption"
   _log_start="$(wc -l <"$_daemon_log" 2>/dev/null || printf '0\n')"
   python3 - <<'PY'
 import os
@@ -491,7 +491,7 @@ PY
 __check_host_task_gate_exemption() {
   local _log_start _host_pid
 
-  __log "checking non-Nscell host task gate exemption"
+  __log "checking non-NSCell host task gate exemption"
   _log_start="$(wc -l <"$_daemon_log" 2>/dev/null || printf '0\n')"
   sleep 3600 &
   _host_pid="$!"
@@ -508,7 +508,7 @@ __check_host_target_task_gate() {
   local _name="${_container_security_policy_name}-host-target"
   local _source_cgroup _log_start _host_pid
 
-  __log "checking Nscell container task gate against host target"
+  __log "checking NSCell container task gate against host target"
   docker rm -f "$_name" >/dev/null 2>&1 || true
   docker run -d \
     --name "$_name" \
@@ -543,7 +543,7 @@ __check_cross_container_task_gate() {
   local _name_b="${_container_security_policy_name}-task-b"
   local _source_cgroup _target_cgroup _log_start _target_pid
 
-  __log "checking Nscell cross-container task gate"
+  __log "checking NSCell cross-container task gate"
   docker rm -f "$_name_a" "$_name_b" >/dev/null 2>&1 || true
   __cleanup() {
     if [[ -n "${_target_pid:-}" ]]; then

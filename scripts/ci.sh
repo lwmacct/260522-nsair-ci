@@ -147,7 +147,7 @@ __install_nscell_systemd_units() {
   __log "installing nscell-daemon systemd unit"
   sudo tee /etc/systemd/system/nscell-daemon.service >/dev/null <<EOF
 [Unit]
-Description=nscell-daemon (Nscell control and data plane)
+Description=nscell-daemon (NSCell control and data plane)
 Before=docker.service containerd.service
 
 [Service]

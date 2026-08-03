@@ -1,10 +1,10 @@
-name: Nscell CI Gate Mode
+name: NSCell CI Gate Mode
 
 on:
   workflow_dispatch:
     inputs:
       nscell_image:
-        description: Public image containing the Nscell multi-role binary
+        description: Public image containing the NSCell multi-role binary
         required: true
         default: ghcr.io/lwmacct/260522-nscell:latest
         type: string
@@ -124,7 +124,7 @@ jobs:
       - name: Show host capabilities
         run: bash scripts/ci.sh show-host-capabilities
 
-      - name: Setup Nscell runtime host
+      - name: Setup NSCell runtime host
         run: bash scripts/ci.sh setup-runtime-host
 
       - name: Verify CI gate mode
