@@ -69,7 +69,11 @@ __main() {
 
   __log "restoring daemon inside the runtime client's retry window"
   sudo systemctl start nsair-daemon.service
-  wait "$_create_pid"
+  if ! wait "$_create_pid"; then
+    echo "OCI create failed after daemon recovery" >&2
+    cat "$_create_log" >&2
+    exit 1
+  fi
   _finished_ms="$(date +%s%3N)"
   _elapsed_ms=$((_finished_ms - _started_ms))
   if ((_elapsed_ms < 900 || _elapsed_ms >= 5000)); then

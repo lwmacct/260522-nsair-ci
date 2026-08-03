@@ -28,6 +28,8 @@ __prepare_oci_bundle() {
     --argjson _args "$_process_args_json" \
     '.process.args = $_args
       | .process.terminal = false
+      | .linux.maskedPaths = []
+      | .linux.readonlyPaths = []
       | .annotations["io.backend.security.profile"] = "default"' \
     "${_bundle}/config.json" >"$_config_tmp"
   sudo install -m 0600 "$_config_tmp" "${_bundle}/config.json"
