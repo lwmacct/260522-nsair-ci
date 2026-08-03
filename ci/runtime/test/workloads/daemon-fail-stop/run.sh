@@ -22,6 +22,7 @@ __restore_daemon() {
   __remove_oci_container "$_oci_runtime_root" "$_daemon_fail_stop_id"
   __remove_oci_container "$_oci_runtime_root" "${_daemon_fail_stop_id}-fresh"
   docker rm -f "$_export_name" >/dev/null 2>&1 || true
+  __remove_oci_bundle "$_bundle"
 }
 
 __wait_for_process_exit() {
@@ -43,7 +44,6 @@ __main() {
 
   if [[ "${1:-}" == "cleanup" ]]; then
     __restore_daemon
-    __remove_oci_bundle "$_bundle"
     return
   fi
 
@@ -108,7 +108,6 @@ __main() {
 
   trap - EXIT
   __restore_daemon
-  __remove_oci_bundle "$_bundle"
   echo "daemon-fail-stop-validation-ok"
 }
 
