@@ -98,6 +98,11 @@ __main() {
   __log "restarting daemon and validating a fresh container"
   sudo systemctl start nsair-daemon.service
   __assert_nsair_ready
+  __prepare_oci_bundle \
+    "$_oci_base_image" \
+    "$_bundle" \
+    '["/bin/sh", "-c", "trap exit TERM INT; while :; do sleep 1; done"]' \
+    "$_export_name"
   sudo nsair --root "$_oci_runtime_root" create \
     --bundle "$_bundle" \
     "${_daemon_fail_stop_id}-fresh"

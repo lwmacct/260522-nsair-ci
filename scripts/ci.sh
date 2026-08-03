@@ -254,7 +254,7 @@ __run_workload() {
   __assert_nsair_ready
   export NSAIR_CI_TEST_ROOT="$_test_root"
   export NSAIR_CI_IMAGE_CACHE_DIR="$_image_cache_dir"
-  export NSAIR_WORKLOAD_ID="$_resource_id"
+  export NSAIR_CI_LOG_ROOT="${_test_root}/runs/${_resource_id}/logs"
   export NSAIR_WORKLOAD_RUN_ID="$_resource_id"
 
   bash "${_runtime_test_dir}/run.sh" run "$_workload"
