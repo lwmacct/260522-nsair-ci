@@ -21,14 +21,13 @@ gate check, diagnostics, and workload flow live in this repository under
 `scripts/ci.sh` and `ci/runtime/test/`.
 
 All migrated runtime workloads are stored in `ci/runtime/test/workloads/`.
-The workflow runs workloads as a GitHub Actions matrix, so every workload gets
-its own runner, Docker daemon, systemd services, logs, and artifact.
+The workflow discovers and runs every workload in parallel by default, so each
+workload gets its own runner, Docker daemon, systemd services, logs, and
+artifact. A manual run may provide a space-separated `workloads` value to
+isolate one or more failing workloads; an empty value always means the full
+suite.
 
-The default group runs `procfs-cpu`, `procfs-memory`, and
-`seccomp-notify-concurrency`. Manual runs can select `extended`, `all`, or
-`custom` with a space-separated `workloads` value.
-
-The workflow is manual-only. It does not need access to the private Nsair
-source repository. It installs ORAS, fetches the selected linux/amd64 image
-manifest and layers, extracts `/usr/local/bin/nsair`, then installs the binary
-and the `nsair-daemon.service` systemd unit on the runner.
+The workflow can be invoked manually or used as a release-gating reusable
+workflow. It installs ORAS, fetches the selected linux/amd64 image manifest and
+layers, extracts `/usr/local/bin/nsair`, then installs the binary and the
+`nsair-daemon.service` systemd unit on the runner.

@@ -1,6 +1,17 @@
 name: Nsair CI Gate Mode
 
 on:
+  workflow_call:
+    inputs:
+      nsair_image:
+        description: Immutable public image reference to validate
+        required: true
+        type: string
+      workloads:
+        description: Space-separated workloads; empty runs every available workload
+        required: false
+        default: ""
+        type: string
   workflow_dispatch:
     inputs:
       nsair_image:
@@ -18,24 +29,14 @@ on:
         required: true
         default: procfs-cpu
         type: string
-      workload_group:
-        description: Workload group to run
-        required: true
-        default: default
-        type: choice
-        options:
-          - default
-          - extended
-          - all
-          - custom
       workloads:
-        description: Space-separated workloads, used when workload_group is custom
+        description: Space-separated workloads; empty runs every available workload
         required: false
         default: ""
         type: string
 
 concurrency:
-  group: nsair-ci-gate-mode-${{ github.ref }}
+  group: nsair-ci-gate-mode-${{ inputs.nsair_image }}-${{ inputs.workloads || 'all' }}
   cancel-in-progress: true
 
 permissions:
@@ -61,12 +62,14 @@ jobs:
     steps:
       - name: Checkout CI repository
         uses: actions/checkout@v7.0.0
+        with:
+          repository: lwmacct/260522-nsair-ci
+          ref: main
 
       - name: Build workload matrix
         id: matrix
         env:
-          WORKLOAD_GROUP: ${{ inputs.workload_group || 'default' }}
-          CUSTOM_WORKLOADS: ${{ inputs.workloads || '' }}
+          SELECTED_WORKLOADS: ${{ inputs.workloads || '' }}
         run: |
           python3 - <<'PY' >>"$GITHUB_OUTPUT"
           import json
@@ -77,28 +80,10 @@ jobs:
 
           root = pathlib.Path("ci/runtime/test/workloads")
           available = sorted(path.name for path in root.iterdir() if (path / "run.sh").is_file())
-          groups = {
-              "default": ["procfs-cpu", "procfs-memory", "seccomp-notify-concurrency"],
-              "extended": [
-                  "procfs-cpu",
-                  "procfs-memory",
-                  "seccomp-notify-concurrency",
-                  "systemd-pid1",
-                  "docker-in-docker",
-                  "kubernetes-k3s",
-              ],
-              "all": available,
-          }
-          group = os.environ.get("WORKLOAD_GROUP", "default").strip() or "default"
-          if group == "custom":
-              workloads = shlex.split(os.environ.get("CUSTOM_WORKLOADS", ""))
-          elif group in groups:
-              workloads = groups[group]
-          else:
-              print(f"unknown workload_group: {group}", file=sys.stderr)
-              sys.exit(2)
+          selected = shlex.split(os.environ.get("SELECTED_WORKLOADS", ""))
+          workloads = selected or available
           if not workloads:
-              print("no workloads selected", file=sys.stderr)
+              print("no workloads are available", file=sys.stderr)
               sys.exit(2)
           unknown = [workload for workload in workloads if workload not in available]
           if unknown:
@@ -115,7 +100,6 @@ jobs:
     timeout-minutes: 90
     strategy:
       fail-fast: false
-      max-parallel: 7
       matrix:
         workload: ${{ fromJson(needs.prepare.outputs.workloads) }}
     env:
@@ -123,6 +107,9 @@ jobs:
     steps:
       - name: Checkout CI repository
         uses: actions/checkout@v7.0.0
+        with:
+          repository: lwmacct/260522-nsair-ci
+          ref: main
 
       - name: Open tmate session
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_tmate && matrix.workload == inputs.debug_workload }}
