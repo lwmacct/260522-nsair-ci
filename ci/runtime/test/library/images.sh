@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2154
 
 __safe_image_name() {
 	printf '%s' "$1" | sed -E 's#[/:@]+#_#g'
@@ -9,11 +10,32 @@ __image_archive_path() {
 	printf '%s/%s.tar\n' "$_image_cache_dir" "$(__safe_image_name "$_image")"
 }
 
+__retry() {
+	local _max_attempts="$1"
+	shift
+	local _attempt=1
+	local _status
+
+	while true; do
+		if "$@"; then
+			return 0
+		else
+			_status=$?
+		fi
+		if ((_attempt >= _max_attempts)); then
+			return "$_status"
+		fi
+		__log "${1} failed with ${_status}; retrying ($((_attempt + 1))/${_max_attempts})"
+		sleep $((_attempt * 5))
+		_attempt=$((_attempt + 1))
+	done
+}
+
 __ensure_host_image() {
 	local _image="$1"
 	if ! docker image inspect "$_image" >/dev/null 2>&1; then
 		__log "pulling host image ${_image}"
-		docker pull "$_image"
+		__retry 3 docker pull "$_image"
 	fi
 }
 
@@ -34,7 +56,7 @@ __build_ci_image() {
 	shift 2
 
 	__log "building CI image ${_image}"
-	docker build --network host -t "$_image" "$@" "$_context"
+	__retry 3 docker build --network host -t "$_image" "$@" "$_context"
 }
 
 __workload_var_name() {
