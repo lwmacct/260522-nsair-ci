@@ -62,8 +62,26 @@ __host_cgroup_path() {
   printf '/sys/fs/cgroup%s\n' "$_relative"
 }
 
+__find_frozen_cgroup() {
+  local _current="$1"
+
+  while [[ "$_current" == "/sys/fs/cgroup" || "$_current" == "/sys/fs/cgroup/"* ]]; do
+    if sudo test -f "${_current}/cgroup.freeze" &&
+      [[ "$(sudo cat "${_current}/cgroup.freeze")" == "1" ]]; then
+      printf '%s\n' "$_current"
+      return 0
+    fi
+    if [[ "$_current" == "/sys/fs/cgroup" ]]; then
+      break
+    fi
+    _current="${_current%/*}"
+  done
+
+  return 1
+}
+
 __main() {
-  local _pid _cgroup _exec_output _stats_output
+  local _pid _process_cgroup _frozen_cgroup _exec_output _stats_output
 
   if [[ "${1:-}" == "cleanup" ]]; then
     __cleanup
@@ -116,17 +134,18 @@ __main() {
     exit 1
   fi
 
-  _cgroup="$(__host_cgroup_path "$_pid")"
-  sudo test -f "${_cgroup}/cgroup.freeze"
+  _process_cgroup="$(__host_cgroup_path "$_pid")"
+  sudo test -f "${_process_cgroup}/cgroup.freeze"
   sudo nsair --root "$_oci_runtime_root" pause "$_oci_lifecycle_id"
   __assert_state paused
-  if [[ "$(sudo cat "${_cgroup}/cgroup.freeze")" != "1" ]]; then
-    echo "cgroup.freeze did not report a paused cgroup" >&2
+  if ! _frozen_cgroup="$(__find_frozen_cgroup "$_process_cgroup")"; then
+    echo "no frozen cgroup found for paused container from ${_process_cgroup}" >&2
     exit 1
   fi
+  printf 'oci-frozen-cgroup=%s\n' "$_frozen_cgroup"
   sudo nsair --root "$_oci_runtime_root" resume "$_oci_lifecycle_id"
   __assert_state running
-  if [[ "$(sudo cat "${_cgroup}/cgroup.freeze")" != "0" ]]; then
+  if [[ "$(sudo cat "${_frozen_cgroup}/cgroup.freeze")" != "0" ]]; then
     echo "cgroup.freeze did not report a resumed cgroup" >&2
     exit 1
   fi
