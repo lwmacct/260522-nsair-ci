@@ -50,36 +50,6 @@ __wait_for_state() {
   return 1
 }
 
-__host_cgroup_path() {
-  local _pid="$1"
-  local _relative
-
-  _relative="$(awk -F: '$1 == "0" { print $3; exit }' "/proc/${_pid}/cgroup")"
-  if [[ -z "$_relative" ]]; then
-    echo "unable to resolve unified cgroup for pid ${_pid}" >&2
-    return 1
-  fi
-  printf '/sys/fs/cgroup%s\n' "$_relative"
-}
-
-__find_frozen_cgroup() {
-  local _current="$1"
-
-  while [[ "$_current" == "/sys/fs/cgroup" || "$_current" == "/sys/fs/cgroup/"* ]]; do
-    if sudo test -f "${_current}/cgroup.freeze" &&
-      [[ "$(sudo cat "${_current}/cgroup.freeze")" == "1" ]]; then
-      printf '%s\n' "$_current"
-      return 0
-    fi
-    if [[ "$_current" == "/sys/fs/cgroup" ]]; then
-      break
-    fi
-    _current="${_current%/*}"
-  done
-
-  return 1
-}
-
 __main() {
   local _pid _process_cgroup _frozen_cgroup _exec_output _stats_output
 
@@ -138,7 +108,8 @@ __main() {
   sudo test -f "${_process_cgroup}/cgroup.freeze"
   sudo nsair --root "$_oci_runtime_root" pause "$_oci_lifecycle_id"
   __assert_state paused
-  if ! _frozen_cgroup="$(__find_frozen_cgroup "$_process_cgroup")"; then
+  if ! _frozen_cgroup="$(__find_ancestor_cgroup_with_value \
+    "$_process_cgroup" cgroup.freeze 1)"; then
     echo "no frozen cgroup found for paused container from ${_process_cgroup}" >&2
     exit 1
   fi

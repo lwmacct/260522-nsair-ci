@@ -48,3 +48,40 @@ __remove_oci_bundle() {
 
   sudo rm -rf "$_bundle"
 }
+
+__host_cgroup_path() {
+  local _pid="$1"
+  local _relative
+
+  _relative="$(awk -F: '$1 == "0" { print $3; exit }' "/proc/${_pid}/cgroup")"
+  if [[ -z "$_relative" ]]; then
+    echo "unable to resolve unified cgroup for pid ${_pid}" >&2
+    return 1
+  fi
+  printf '/sys/fs/cgroup%s\n' "$_relative"
+}
+
+__find_ancestor_cgroup_with_value() {
+  local _current="$1"
+  local _file="$2"
+  local _expected="$3"
+
+  if [[ "$_file" == */* ]]; then
+    echo "cgroup control file must be a basename: ${_file}" >&2
+    return 1
+  fi
+
+  while [[ "$_current" == "/sys/fs/cgroup" || "$_current" == "/sys/fs/cgroup/"* ]]; do
+    if sudo test -f "${_current}/${_file}" &&
+      [[ "$(sudo cat "${_current}/${_file}")" == "$_expected" ]]; then
+      printf '%s\n' "$_current"
+      return 0
+    fi
+    if [[ "$_current" == "/sys/fs/cgroup" ]]; then
+      break
+    fi
+    _current="${_current%/*}"
+  done
+
+  return 1
+}
