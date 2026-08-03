@@ -1,17 +1,6 @@
 name: Nsair CI Gate Mode
 
 on:
-  workflow_call:
-    inputs:
-      nsair_image:
-        description: Immutable public image reference to validate
-        required: true
-        type: string
-      workloads:
-        description: Space-separated workloads; empty runs every available workload
-        required: false
-        default: ""
-        type: string
   workflow_dispatch:
     inputs:
       nsair_image:
