@@ -30,6 +30,11 @@ _volume_root="${NSAIR_CI_VOLUME_ROOT:-${_workload_run_root}/volumes}"
 _log_root="${NSAIR_CI_LOG_ROOT:-${_workload_run_root}/logs}"
 _daemon_log="${NSAIR_DAEMON_LOG:-/var/log/nsair-daemon.log}"
 
+_oci_base_image="${NSAIR_CI_OCI_BASE_IMAGE:-docker.io/library/busybox:1.37.0}"
+_oci_runtime_root="${NSAIR_CI_OCI_RUNTIME_ROOT:-/run/nsair/runtime}"
+_daemon_fail_stop_id="${NSAIR_CI_DAEMON_FAIL_STOP_ID:-daemon-fail-stop${_workload_resource_id:+-${_workload_resource_id}}}"
+_daemon_dial_retry_id="${NSAIR_CI_DAEMON_DIAL_RETRY_ID:-daemon-dial-retry${_workload_resource_id:+-${_workload_resource_id}}}"
+
 _docker_in_docker_name="${NSAIR_CI_DOCKER_IN_DOCKER_NAME:-nsair-docker-in-docker${_workload_resource_id:+-${_workload_resource_id}}}"
 _docker_in_docker_network="${NSAIR_CI_DOCKER_IN_DOCKER_NETWORK:-nsair-docker-in-docker${_workload_resource_id:+-${_workload_resource_id}}}"
 _docker_in_docker_base_image="${NSAIR_CI_DOCKER_IN_DOCKER_BASE_IMAGE:-ghcr.io/lwmacct/250210-cr-docker:latest}"
