@@ -108,9 +108,9 @@ __run_all_tests() {
   __require_cmd docker
   __require_cmd flock
   __init_ci_dirs
-  __assert_nsair_ready
+  __assert_nscell_ready
 
-  __log "running nsair workload tests: ${_workloads[*]}"
+  __log "running nscell workload tests: ${_workloads[*]}"
   for _workload in "${_workloads[@]}"; do
     if bash "$0" "$_workload" >"${_log_root}/${_workload}.log" 2>&1; then
       __log "${_workload} workload test passed"
@@ -145,10 +145,10 @@ __run_parallel_tests() {
   __require_cmd docker
   __require_cmd flock
   __init_ci_dirs
-  __assert_nsair_ready
+  __assert_nscell_ready
 
-  if [[ -n "${NSAIR_WORKLOAD_RUN_ID:-}" ]]; then
-    _run_id="$NSAIR_WORKLOAD_RUN_ID"
+  if [[ -n "${NSCELL_WORKLOAD_RUN_ID:-}" ]]; then
+    _run_id="$NSCELL_WORKLOAD_RUN_ID"
   elif [[ -n "${GITHUB_RUN_ID:-}" ]]; then
     _run_id="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}"
   else
@@ -160,13 +160,13 @@ __run_parallel_tests() {
   _log_dir="${_run_root}/logs"
   install -d -m 0755 "$_log_dir"
 
-  __log "running nsair workload tests concurrently: ${_workloads[*]}"
+  __log "running nscell workload tests concurrently: ${_workloads[*]}"
   for _workload in "${_workloads[@]}"; do
     ((++_index))
     _workload_id="${_run_id}-${_index}"
     (
-      export NSAIR_WORKLOAD_ID="$_workload_id"
-      unset NSAIR_CI_VOLUME_ROOT NSAIR_CI_LOG_ROOT
+      export NSCELL_WORKLOAD_ID="$_workload_id"
+      unset NSCELL_CI_VOLUME_ROOT NSCELL_CI_LOG_ROOT
       bash "$0" "$_workload"
     ) >"${_log_dir}/${_workload}.log" 2>&1 &
     _pid=$!

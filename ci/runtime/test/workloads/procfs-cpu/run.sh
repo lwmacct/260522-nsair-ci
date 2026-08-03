@@ -23,7 +23,7 @@ __main() {
   fi
 
   __require_cmd docker
-  __assert_nsair_ready
+  __assert_nscell_ready
   __init_ci_dirs
 
   docker rm -f "$_procfs_cpu_name" "${_procfs_cpu_name}-nolimit" "${_procfs_cpu_name}-idle-isolation" "$_pressure_name" >/dev/null 2>&1 || true
@@ -33,7 +33,7 @@ __main() {
   docker run --rm \
     --name "${_procfs_cpu_name}-nolimit" \
     --hostname "${_procfs_cpu_name}-nolimit" \
-    --runtime nsair \
+    --runtime nscell \
     --cgroupns=private \
     --label io.backend.security.profile=default \
     -e "CI_PROCFS_CPU_EXPECT_VISIBLE_FROM_AFFINITY=1" \
@@ -44,7 +44,7 @@ __main() {
   docker run --rm \
     --name "$_procfs_cpu_name" \
     --hostname "$_procfs_cpu_name" \
-    --runtime nsair \
+    --runtime nscell \
     --cgroupns=private \
     --cpus "$_procfs_cpu_quota_cpus" \
     --label io.backend.security.profile=default \
@@ -63,7 +63,7 @@ __main() {
   docker run --rm \
     --name "${_procfs_cpu_name}-idle-isolation" \
     --hostname "${_procfs_cpu_name}-idle-isolation" \
-    --runtime nsair \
+    --runtime nscell \
     --cgroupns=private \
     --cpus "$_procfs_cpu_quota_cpus" \
     --label io.backend.security.profile=default \
@@ -76,7 +76,7 @@ __main() {
     return "$_idle_status"
   fi
 
-  __assert_nsair_ready
+  __assert_nscell_ready
   echo "procfs-cpu-validation-ok"
 }
 

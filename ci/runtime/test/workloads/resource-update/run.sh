@@ -15,7 +15,7 @@ source "${_workload_dir}/library/images.sh"
 source "${_workload_dir}/library/oci.sh"
 
 _bundle="${_volume_root}/resource-update/bundle"
-_export_name="nsair-resource-update-export-${_workload_resource_id:-resource-update}"
+_export_name="nscell-resource-update-export-${_workload_resource_id:-resource-update}"
 _initial_memory_bytes=268435456
 _updated_memory_bytes=134217728
 _initial_cpu_quota=200000
@@ -64,7 +64,7 @@ __assert_cgroup_value() {
 }
 
 __container_memtotal_kib() {
-  sudo nsair --root "$_oci_runtime_root" exec "$_resource_update_id" \
+  sudo nscell --root "$_oci_runtime_root" exec "$_resource_update_id" \
     /bin/sh -c "awk '\$1 == \"MemTotal:\" { print \$2; exit }' /proc/meminfo"
 }
 
@@ -91,7 +91,7 @@ __main() {
 
   __require_cmd docker
   __require_cmd jq
-  __assert_nsair_ready
+  __assert_nscell_ready
   __init_ci_dirs
   trap __cleanup EXIT
 
@@ -104,11 +104,11 @@ __main() {
   __configure_initial_resources
 
   __log "validating initial OCI resource constraints"
-  sudo nsair --root "$_oci_runtime_root" create \
+  sudo nscell --root "$_oci_runtime_root" create \
     --bundle "$_bundle" \
     --pid-file "${_bundle}/init.pid" \
     "$_resource_update_id"
-  sudo nsair --root "$_oci_runtime_root" start "$_resource_update_id"
+  sudo nscell --root "$_oci_runtime_root" start "$_resource_update_id"
   _pid="$(sudo cat "${_bundle}/init.pid")"
   _process_cgroup="$(__host_cgroup_path "$_pid")"
   _container_cgroup="$(__find_ancestor_cgroup_with_value \
@@ -121,7 +121,7 @@ __main() {
   __assert_container_memtotal "$_initial_memory_bytes"
 
   __log "updating resources on the running OCI container"
-  sudo nsair --root "$_oci_runtime_root" update \
+  sudo nscell --root "$_oci_runtime_root" update \
     --memory "$_updated_memory_bytes" \
     --memory-swap "$_updated_memory_bytes" \
     --cpu-quota "$_updated_cpu_quota" \
@@ -135,7 +135,7 @@ __main() {
   __assert_cgroup_value "$_container_cgroup" pids.max "$_updated_pids"
   __assert_container_memtotal "$_updated_memory_bytes"
 
-  _stats_output="$(sudo nsair --root "$_oci_runtime_root" events --stats \
+  _stats_output="$(sudo nscell --root "$_oci_runtime_root" events --stats \
     "$_resource_update_id")"
   printf 'resource-update-stats=%s\n' "$_stats_output"
   jq -e \

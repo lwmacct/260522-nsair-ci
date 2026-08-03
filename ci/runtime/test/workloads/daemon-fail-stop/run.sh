@@ -15,10 +15,10 @@ source "${_workload_dir}/library/images.sh"
 source "${_workload_dir}/library/oci.sh"
 
 _bundle="${_volume_root}/daemon-fail-stop/bundle"
-_export_name="nsair-oci-export-${_workload_resource_id:-daemon-fail-stop}"
+_export_name="nscell-oci-export-${_workload_resource_id:-daemon-fail-stop}"
 
 __restore_daemon() {
-  sudo systemctl start nsair-daemon.service >/dev/null 2>&1 || true
+  sudo systemctl start nscell-daemon.service >/dev/null 2>&1 || true
   __remove_oci_container "$_oci_runtime_root" "$_daemon_fail_stop_id"
   __remove_oci_container "$_oci_runtime_root" "${_daemon_fail_stop_id}-fresh"
   docker rm -f "$_export_name" >/dev/null 2>&1 || true
@@ -50,7 +50,7 @@ __main() {
   __require_cmd docker
   __require_cmd jq
   __require_cmd systemctl
-  __assert_nsair_ready
+  __assert_nscell_ready
   __init_ci_dirs
   trap __restore_daemon EXIT
 
@@ -62,22 +62,22 @@ __main() {
     "$_export_name"
 
   __log "creating an active OCI container in the daemon-owned runtime root"
-  sudo nsair --root "$_oci_runtime_root" create \
+  sudo nscell --root "$_oci_runtime_root" create \
     --bundle "$_bundle" \
     --pid-file "${_bundle}/init.pid" \
     "$_daemon_fail_stop_id"
-  sudo nsair --root "$_oci_runtime_root" start "$_daemon_fail_stop_id"
-  sudo nsair --root "$_oci_runtime_root" state "$_daemon_fail_stop_id" |
+  sudo nscell --root "$_oci_runtime_root" start "$_daemon_fail_stop_id"
+  sudo nscell --root "$_oci_runtime_root" state "$_daemon_fail_stop_id" |
     jq -e '.status == "running" and .pid > 0' >/dev/null
   _pid="$(sudo cat "${_bundle}/init.pid")"
   sudo test -d "/proc/${_pid}"
-  sudo test -f "/run/nsair/containers/${_daemon_fail_stop_id}.cap"
-  sudo findmnt -rn -T "/var/lib/nsairfs/${_daemon_fail_stop_id}" -o FSTYPE |
-    grep -Eq '^fuse(\.nsairfs)?$'
+  sudo test -f "/run/nscell/containers/${_daemon_fail_stop_id}.cap"
+  sudo findmnt -rn -T "/var/lib/nscellfs/${_daemon_fail_stop_id}" -o FSTYPE |
+    grep -Eq '^fuse(\.nscellfs)?$'
 
   __log "stopping daemon and verifying the fail-stop contract"
-  sudo systemctl stop nsair-daemon.service
-  if systemctl is-active --quiet nsair-daemon.service; then
+  sudo systemctl stop nscell-daemon.service
+  if systemctl is-active --quiet nscell-daemon.service; then
     echo "daemon remained active after systemctl stop" >&2
     exit 1
   fi
@@ -86,28 +86,28 @@ __main() {
     echo "runtime state survived daemon shutdown: ${_oci_runtime_root}/${_daemon_fail_stop_id}" >&2
     exit 1
   fi
-  if sudo test -e "/run/nsair/containers/${_daemon_fail_stop_id}.cap"; then
+  if sudo test -e "/run/nscell/containers/${_daemon_fail_stop_id}.cap"; then
     echo "container capability survived daemon shutdown" >&2
     exit 1
   fi
-  if sudo findmnt -rn -t fuse,fuse.nsairfs | grep -F "/${_daemon_fail_stop_id}"; then
+  if sudo findmnt -rn -t fuse,fuse.nscellfs | grep -F "/${_daemon_fail_stop_id}"; then
     echo "VirtFS mount survived daemon shutdown" >&2
     exit 1
   fi
 
   __log "restarting daemon and validating a fresh container"
-  sudo systemctl start nsair-daemon.service
-  __assert_nsair_ready
+  sudo systemctl start nscell-daemon.service
+  __assert_nscell_ready
   __prepare_oci_bundle \
     "$_oci_base_image" \
     "$_bundle" \
     '["/bin/sh", "-c", "trap exit TERM INT; while :; do sleep 1; done"]' \
     "$_export_name"
-  sudo nsair --root "$_oci_runtime_root" create \
+  sudo nscell --root "$_oci_runtime_root" create \
     --bundle "$_bundle" \
     "${_daemon_fail_stop_id}-fresh"
-  sudo nsair --root "$_oci_runtime_root" start "${_daemon_fail_stop_id}-fresh"
-  sudo nsair --root "$_oci_runtime_root" state "${_daemon_fail_stop_id}-fresh" |
+  sudo nscell --root "$_oci_runtime_root" start "${_daemon_fail_stop_id}-fresh"
+  sudo nscell --root "$_oci_runtime_root" state "${_daemon_fail_stop_id}-fresh" |
     jq -e '.status == "running" and .pid > 0' >/dev/null
   __remove_oci_container "$_oci_runtime_root" "${_daemon_fail_stop_id}-fresh"
 

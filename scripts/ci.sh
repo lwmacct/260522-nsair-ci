@@ -7,15 +7,15 @@ _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _repo_root="$(cd "${_script_dir}/.." && pwd)"
 _runtime_test_dir="${_repo_root}/ci/runtime/test"
 
-_nsair_image="${NSAIR_IMAGE:-ghcr.io/lwmacct/260522-nsair:latest}"
-_test_root="${NSAIR_CI_TEST_ROOT:-/tmp/nsair}"
-_image_cache_dir="${NSAIR_CI_IMAGE_CACHE_DIR:-${_test_root}/images}"
-_gate_mode="${NSAIR_GATE_MODE:-ci}"
-_target_platform="${NSAIR_IMAGE_PLATFORM:-linux/amd64}"
-_release_root="${NSAIR_RELEASE_ROOT:-/opt/nsair/releases}"
-_current_link="${NSAIR_CURRENT_LINK:-/opt/nsair/current}"
-_daemon_log="${NSAIR_DAEMON_LOG:-/var/log/nsair-daemon.log}"
-_run_id="${NSAIR_WORKLOAD_RUN_ID:-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}}"
+_nscell_image="${NSCELL_IMAGE:-ghcr.io/lwmacct/260522-nscell:latest}"
+_test_root="${NSCELL_CI_TEST_ROOT:-/tmp/nscell}"
+_image_cache_dir="${NSCELL_CI_IMAGE_CACHE_DIR:-${_test_root}/images}"
+_gate_mode="${NSCELL_GATE_MODE:-ci}"
+_target_platform="${NSCELL_IMAGE_PLATFORM:-linux/amd64}"
+_release_root="${NSCELL_RELEASE_ROOT:-/opt/nscell/releases}"
+_current_link="${NSCELL_CURRENT_LINK:-/opt/nscell/current}"
+_daemon_log="${NSCELL_DAEMON_LOG:-/var/log/nscell-daemon.log}"
+_run_id="${NSCELL_WORKLOAD_RUN_ID:-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}}"
 _resource_id="$(printf '%s' "$_run_id" | tr -c '[:alnum:]_.-' '-')"
 _resource_id="${_resource_id:0:32}"
 
@@ -57,10 +57,10 @@ __setup_runtime_host() {
   __require_cmd oras
 
   __init_ci_dirs
-  __install_nsair_binary
-  __install_nsair_systemd_units
+  __install_nscell_binary
+  __install_nscell_systemd_units
   __configure_docker_runtime
-  __restart_nsair_services
+  __restart_nscell_services
   echo "ci-setup-ok"
 }
 
@@ -81,16 +81,16 @@ __image_repo() {
   printf '%s' "$_repo"
 }
 
-__extract_nsair_binary_from_image() {
+__extract_nscell_binary_from_image() {
   local _dest="$1"
   local _work_dir _manifest _repo _digest _layer _i
 
   _work_dir="$(mktemp -d "${_test_root}/oras-image.XXXXXX")"
   _manifest="${_work_dir}/manifest.json"
-  _repo="$(__image_repo "$_nsair_image")"
+  _repo="$(__image_repo "$_nscell_image")"
 
-  __log "fetching ${_target_platform} manifest from ${_nsair_image}"
-  oras manifest fetch --platform "$_target_platform" --output "$_manifest" "$_nsair_image"
+  __log "fetching ${_target_platform} manifest from ${_nscell_image}"
+  oras manifest fetch --platform "$_target_platform" --output "$_manifest" "$_nscell_image"
 
   mkdir -p "${_work_dir}/rootfs" "${_work_dir}/layers"
   _i=0
@@ -104,55 +104,55 @@ __extract_nsair_binary_from_image() {
   done < <(jq -r '.layers[].digest' "$_manifest")
 
   install -d -m 0755 "$_dest"
-  install -m 0755 "${_work_dir}/rootfs/usr/local/bin/nsair" "${_dest}/nsair"
+  install -m 0755 "${_work_dir}/rootfs/usr/local/bin/nscell" "${_dest}/nscell"
   rm -rf "$_work_dir"
 }
 
-__install_nsair_binary() {
+__install_nscell_binary() {
   local _release _artifact_bin_dir _next_link
   _release="${_release_root}/$(date +%Y%m%d%H%M%S)-ci"
-  _artifact_bin_dir="${_test_root}/nsair-bin"
+  _artifact_bin_dir="${_test_root}/nscell-bin"
 
-  __log "removing previous validation containers before installing nsair"
+  __log "removing previous validation containers before installing nscell"
   docker ps -a --format '{{.Names}}' |
-    awk '/^nsair-(docker-in-docker|kubernetes-k3s|systemd-pid1|procfs-memory|procfs-cpu|seccomp-notify-concurrency|container-security-policy)/ { print }' |
+    awk '/^nscell-(docker-in-docker|kubernetes-k3s|systemd-pid1|procfs-memory|procfs-cpu|seccomp-notify-concurrency|container-security-policy)/ { print }' |
     xargs -r docker rm -f >/dev/null 2>&1 || true
   docker network ls --format '{{.Name}}' |
-    awk '/^nsair-docker-in-docker/ { print }' |
+    awk '/^nscell-docker-in-docker/ { print }' |
     xargs -r docker network rm >/dev/null 2>&1 || true
 
   rm -rf "$_artifact_bin_dir"
-  __extract_nsair_binary_from_image "$_artifact_bin_dir"
-  "${_artifact_bin_dir}/nsair" version
+  __extract_nscell_binary_from_image "$_artifact_bin_dir"
+  "${_artifact_bin_dir}/nscell" version
 
-  __log "installing nsair to ${_release}"
+  __log "installing nscell to ${_release}"
   sudo install -d -m 0755 "${_release}/bin"
-  sudo install -m 0755 "${_artifact_bin_dir}/nsair" "${_release}/bin/nsair"
+  sudo install -m 0755 "${_artifact_bin_dir}/nscell" "${_release}/bin/nscell"
   _next_link="${_current_link}.next"
   sudo rm -f "$_next_link"
   sudo ln -s "$_release" "$_next_link"
   sudo mv -Tf "$_next_link" "$_current_link"
-  sudo ln -sfn "${_current_link}/bin/nsair" /usr/bin/nsair
+  sudo ln -sfn "${_current_link}/bin/nscell" /usr/bin/nscell
 }
 
-__install_nsair_systemd_units() {
+__install_nscell_systemd_units() {
   case "$_gate_mode" in
   strict | ci) ;;
   *)
-    echo "unsupported NSAIR_GATE_MODE: $_gate_mode" >&2
+    echo "unsupported NSCELL_GATE_MODE: $_gate_mode" >&2
     exit 2
     ;;
   esac
 
-  __log "installing nsair-daemon systemd unit"
-  sudo tee /etc/systemd/system/nsair-daemon.service >/dev/null <<EOF
+  __log "installing nscell-daemon systemd unit"
+  sudo tee /etc/systemd/system/nscell-daemon.service >/dev/null <<EOF
 [Unit]
-Description=nsair-daemon (Nsair control and data plane)
+Description=nscell-daemon (Nscell control and data plane)
 Before=docker.service containerd.service
 
 [Service]
 Type=notify
-ExecStart=/usr/bin/nsair daemon --log ${_daemon_log} --gate-mode ${_gate_mode} --metrics-listen 127.0.0.1:9618
+ExecStart=/usr/bin/nscell daemon --log ${_daemon_log} --gate-mode ${_gate_mode} --metrics-listen 127.0.0.1:9618
 TimeoutStartSec=45
 TimeoutStopSec=90
 StartLimitInterval=0
@@ -165,14 +165,14 @@ LimitNPROC=infinity
   WantedBy=multi-user.target
 EOF
   sudo systemctl daemon-reload
-  sudo systemctl enable nsair-daemon.service >/dev/null
+  sudo systemctl enable nscell-daemon.service >/dev/null
 }
 
 __configure_docker_runtime() {
   local _daemon_config="/etc/docker/daemon.json"
   local _tmp_config
 
-  __log "configuring docker nsair"
+  __log "configuring docker nscell"
   sudo install -d -m 0755 /etc/docker
   _tmp_config="$(mktemp)"
   if sudo test -s "$_daemon_config"; then
@@ -181,8 +181,8 @@ __configure_docker_runtime() {
 				error("docker daemon config must be a JSON object")
 			else
 				.runtimes = ((.runtimes // {})
-					| .["nsair"] = {
-						"path": "/usr/bin/nsair",
+					| .["nscell"] = {
+						"path": "/usr/bin/nscell",
 						"runtimeArgs": []
 					})
 			end
@@ -190,8 +190,8 @@ __configure_docker_runtime() {
   else
     jq -n '{
 			"runtimes": {
-				"nsair": {
-					"path": "/usr/bin/nsair",
+				"nscell": {
+					"path": "/usr/bin/nscell",
 					"runtimeArgs": []
 				}
 			}
@@ -201,43 +201,43 @@ __configure_docker_runtime() {
   rm -f "$_tmp_config"
 }
 
-__restart_nsair_services() {
-  __log "restarting nsair-daemon and docker"
+__restart_nscell_services() {
+  __log "restarting nscell-daemon and docker"
   docker ps -a --format '{{.Names}}' |
-    awk '/^nsair-(docker-in-docker|kubernetes-k3s|systemd-pid1|procfs-memory|procfs-cpu|seccomp-notify-concurrency|container-security-policy)/ { print }' |
+    awk '/^nscell-(docker-in-docker|kubernetes-k3s|systemd-pid1|procfs-memory|procfs-cpu|seccomp-notify-concurrency|container-security-policy)/ { print }' |
     xargs -r docker rm -f >/dev/null 2>&1 || true
   sudo truncate -s 0 "$_daemon_log" 2>/dev/null || sudo install -m 0600 /dev/null "$_daemon_log"
-  sudo systemctl reset-failed docker.service nsair-daemon.service || true
-  sudo systemctl stop nsair-daemon.service || true
+  sudo systemctl reset-failed docker.service nscell-daemon.service || true
+  sudo systemctl stop nscell-daemon.service || true
   while read -r _mp; do
     [[ -n "$_mp" ]] || continue
     sudo umount -l "$_mp" || true
-  done < <(awk '$0 ~ / - fuse nsairfs / && $5 ~ /^\/var\/lib\/nsairfs\// {print $5}' /proc/self/mountinfo)
-  sudo rm -f /run/nsair/daemon.sock /run/nsair/daemon.pid
-  sudo rm -rf /run/nsair/containers
-  if sudo test -d /var/lib/nsairfs; then
-    sudo find /var/lib/nsairfs -mindepth 1 -maxdepth 1 -xdev -exec rm -rf -- {} + 2>/dev/null || true
+  done < <(awk '$0 ~ / - fuse nscellfs / && $5 ~ /^\/var\/lib\/nscellfs\// {print $5}' /proc/self/mountinfo)
+  sudo rm -f /run/nscell/daemon.sock /run/nscell/daemon.pid
+  sudo rm -rf /run/nscell/containers
+  if sudo test -d /var/lib/nscellfs; then
+    sudo find /var/lib/nscellfs -mindepth 1 -maxdepth 1 -xdev -exec rm -rf -- {} + 2>/dev/null || true
   fi
-  sudo systemctl restart nsair-daemon.service
-  sudo systemctl is-active --quiet nsair-daemon.service
+  sudo systemctl restart nscell-daemon.service
+  sudo systemctl is-active --quiet nscell-daemon.service
   sudo systemctl restart docker
-  __assert_nsair_ready
+  __assert_nscell_ready
 }
 
 __verify_gate() {
-  sudo systemctl is-active --quiet nsair-daemon.service
-  sudo systemctl cat nsair-daemon.service
-  sudo nsair daemon gate status
-  sudo nsair daemon gate status | jq -e '.mode == "ci" and .enforce == false'
+  sudo systemctl is-active --quiet nscell-daemon.service
+  sudo systemctl cat nscell-daemon.service
+  sudo nscell daemon gate status
+  sudo nscell daemon gate status | jq -e '.mode == "ci" and .enforce == false'
 }
 
-__assert_nsair_ready() {
-  __log "checking nsair services"
-  sudo systemctl is-active --quiet nsair-daemon.service
+__assert_nscell_ready() {
+  __log "checking nscell services"
+  sudo systemctl is-active --quiet nscell-daemon.service
   sudo grep -q "Ready ..." "$_daemon_log"
   ! sudo grep -q "ID-mapped mounts are required" "$_daemon_log"
   ! sudo grep -q "overlayfs on ID-mapped mounts is required" "$_daemon_log"
-  docker info --format '{{json .Runtimes}}' | jq -e 'has("nsair")' >/dev/null
+  docker info --format '{{json .Runtimes}}' | jq -e 'has("nscell")' >/dev/null
 }
 
 __run_workload() {
@@ -251,11 +251,11 @@ __run_workload() {
     exit 2
   fi
 
-  __assert_nsair_ready
-  export NSAIR_CI_TEST_ROOT="$_test_root"
-  export NSAIR_CI_IMAGE_CACHE_DIR="$_image_cache_dir"
-  export NSAIR_CI_LOG_ROOT="${_test_root}/runs/${_resource_id}/logs"
-  export NSAIR_WORKLOAD_RUN_ID="$_resource_id"
+  __assert_nscell_ready
+  export NSCELL_CI_TEST_ROOT="$_test_root"
+  export NSCELL_CI_IMAGE_CACHE_DIR="$_image_cache_dir"
+  export NSCELL_CI_LOG_ROOT="${_test_root}/runs/${_resource_id}/logs"
+  export NSCELL_WORKLOAD_RUN_ID="$_resource_id"
 
   bash "${_runtime_test_dir}/run.sh" run "$_workload"
 }
@@ -264,7 +264,7 @@ __run_workloads() {
   local -a _workloads=("$@")
 
   if ((${#_workloads[@]} == 0)); then
-    read -r -a _workloads <<<"${NSAIR_CI_WORKLOADS:-procfs-cpu}"
+    read -r -a _workloads <<<"${NSCELL_CI_WORKLOADS:-procfs-cpu}"
   fi
   if ((${#_workloads[@]} == 0)); then
     _workloads=(procfs-cpu)
@@ -284,17 +284,17 @@ __collect_logs() {
     docker info || true
     docker ps -a || true
     docker images || true
-    for _container in $(docker ps -a --format '{{.Names}}' | awk '/^nsair-/ { print }'); do
+    for _container in $(docker ps -a --format '{{.Names}}' | awk '/^nscell-/ { print }'); do
       docker logs "$_container" || true
     done
-    sudo systemctl --no-pager --full status docker.service nsair-daemon.service || true
-    sudo systemctl cat nsair-daemon.service || true
-    sudo nsair daemon gate status || true
-    sudo journalctl --no-pager -u docker.service -u nsair-daemon.service || true
+    sudo systemctl --no-pager --full status docker.service nscell-daemon.service || true
+    sudo systemctl cat nscell-daemon.service || true
+    sudo nscell daemon gate status || true
+    sudo journalctl --no-pager -u docker.service -u nscell-daemon.service || true
   } 2>&1 | sudo tee "${_log_dir}/host-diagnostics.log" >/dev/null
   if sudo test -f "$_daemon_log"; then
-    sudo cp "$_daemon_log" "${_log_dir}/nsair-daemon.log"
-    sudo chmod 0644 "${_log_dir}/nsair-daemon.log"
+    sudo cp "$_daemon_log" "${_log_dir}/nscell-daemon.log"
+    sudo chmod 0644 "${_log_dir}/nscell-daemon.log"
   fi
 }
 

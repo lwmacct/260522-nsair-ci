@@ -21,7 +21,7 @@ __prepare_oci_bundle() {
   docker rm "$_container" >/dev/null
   sudo chown -R 0:0 "${_bundle}/rootfs"
 
-  sudo nsair spec --bundle "$_bundle"
+  sudo nscell spec --bundle "$_bundle"
   _config_tmp="$(mktemp)"
   # shellcheck disable=SC2024 # The temporary output file is owned by the caller.
   sudo jq \
@@ -40,7 +40,7 @@ __remove_oci_container() {
   local _root="$1"
   local _id="$2"
 
-  sudo nsair --root "$_root" delete --force "$_id" >/dev/null 2>&1 || true
+  sudo nscell --root "$_root" delete --force "$_id" >/dev/null 2>&1 || true
 }
 
 __remove_oci_bundle() {

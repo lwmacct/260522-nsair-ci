@@ -16,10 +16,10 @@ source "${_workload_dir}/library/oci.sh"
 
 _bundle="${_volume_root}/daemon-dial-retry/bundle"
 _create_log="${_log_root}/daemon-dial-retry-create.log"
-_export_name="nsair-oci-export-${_workload_resource_id:-daemon-dial-retry}"
+_export_name="nscell-oci-export-${_workload_resource_id:-daemon-dial-retry}"
 
 __restore_daemon() {
-  sudo systemctl start nsair-daemon.service >/dev/null 2>&1 || true
+  sudo systemctl start nscell-daemon.service >/dev/null 2>&1 || true
   __remove_oci_container "$_oci_runtime_root" "$_daemon_dial_retry_id"
   docker rm -f "$_export_name" >/dev/null 2>&1 || true
   __remove_oci_bundle "$_bundle"
@@ -36,7 +36,7 @@ __main() {
   __require_cmd docker
   __require_cmd jq
   __require_cmd systemctl
-  __assert_nsair_ready
+  __assert_nscell_ready
   __init_ci_dirs
   trap __restore_daemon EXIT
 
@@ -48,14 +48,14 @@ __main() {
     "$_export_name"
 
   __log "stopping an idle daemon before issuing an OCI create request"
-  sudo systemctl stop nsair-daemon.service
-  if systemctl is-active --quiet nsair-daemon.service; then
+  sudo systemctl stop nscell-daemon.service
+  if systemctl is-active --quiet nscell-daemon.service; then
     echo "daemon remained active after systemctl stop" >&2
     exit 1
   fi
   _started_ms="$(date +%s%3N)"
   # shellcheck disable=SC2024 # The workload log directory is owned by the caller.
-  sudo nsair --root "$_oci_runtime_root" create \
+  sudo nscell --root "$_oci_runtime_root" create \
     --bundle "$_bundle" \
     "$_daemon_dial_retry_id" >"$_create_log" 2>&1 &
   _create_pid=$!
@@ -68,7 +68,7 @@ __main() {
   fi
 
   __log "restoring daemon inside the runtime client's retry window"
-  sudo systemctl start nsair-daemon.service
+  sudo systemctl start nscell-daemon.service
   if ! wait "$_create_pid"; then
     echo "OCI create failed after daemon recovery" >&2
     cat "$_create_log" >&2
@@ -81,10 +81,10 @@ __main() {
     exit 1
   fi
 
-  sudo nsair --root "$_oci_runtime_root" state "$_daemon_dial_retry_id" |
+  sudo nscell --root "$_oci_runtime_root" state "$_daemon_dial_retry_id" |
     jq -e '.status == "created" and .pid > 0' >/dev/null
-  sudo nsair --root "$_oci_runtime_root" delete --force "$_daemon_dial_retry_id"
-  __assert_nsair_ready
+  sudo nscell --root "$_oci_runtime_root" delete --force "$_daemon_dial_retry_id"
+  __assert_nscell_ready
 
   trap - EXIT
   __restore_daemon

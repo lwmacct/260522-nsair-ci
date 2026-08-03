@@ -21,7 +21,7 @@ __main() {
 	fi
 
 	__require_cmd docker
-	__assert_nsair_ready
+	__assert_nscell_ready
 	__init_ci_dirs
 
 	_log_start="$(wc -l <"$_daemon_log" 2>/dev/null || printf '0\n')"
@@ -32,7 +32,7 @@ __main() {
 	docker run --rm \
 		--name "$_seccomp_notify_concurrency_name" \
 		--hostname "$_seccomp_notify_concurrency_name" \
-		--runtime nsair \
+		--runtime nscell \
 		--cgroupns=private \
 		--label io.backend.security.profile=default \
 		-e "CI_SECCOMP_NOTIFY_CONCURRENCY_PROCESSES=${_seccomp_notify_concurrency_processes}" \
@@ -48,7 +48,7 @@ __main() {
 		exit 1
 	fi
 
-	__assert_nsair_ready
+	__assert_nscell_ready
 	echo "seccomp-notify-concurrency-validation-ok"
 }
 

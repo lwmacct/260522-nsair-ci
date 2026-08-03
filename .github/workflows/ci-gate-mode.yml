@@ -1,12 +1,12 @@
-name: Nsair CI Gate Mode
+name: Nscell CI Gate Mode
 
 on:
   workflow_dispatch:
     inputs:
-      nsair_image:
-        description: Public image containing the Nsair multi-role binary
+      nscell_image:
+        description: Public image containing the Nscell multi-role binary
         required: true
-        default: ghcr.io/lwmacct/260522-nsair:latest
+        default: ghcr.io/lwmacct/260522-nscell:latest
         type: string
       debug_tmate:
         description: Open an interactive SSH session before setup
@@ -25,7 +25,7 @@ on:
         type: string
 
 concurrency:
-  group: nsair-ci-gate-mode-${{ inputs.nsair_image }}-${{ inputs.workloads || 'all' }}
+  group: nscell-ci-gate-mode-${{ inputs.nscell_image }}-${{ inputs.workloads || 'all' }}
   cancel-in-progress: true
 
 permissions:
@@ -37,10 +37,10 @@ defaults:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  NSAIR_GATE_MODE: ci
-  NSAIR_CI_TEST_ROOT: /tmp/nsair
-  NSAIR_CI_IMAGE_CACHE_DIR: /tmp/nsair/images
-  NSAIR_IMAGE: ${{ inputs.nsair_image || 'ghcr.io/lwmacct/260522-nsair:latest' }}
+  NSCELL_GATE_MODE: ci
+  NSCELL_CI_TEST_ROOT: /tmp/nscell
+  NSCELL_CI_IMAGE_CACHE_DIR: /tmp/nscell/images
+  NSCELL_IMAGE: ${{ inputs.nscell_image || 'ghcr.io/lwmacct/260522-nscell:latest' }}
 
 jobs:
   prepare:
@@ -52,7 +52,7 @@ jobs:
       - name: Checkout CI repository
         uses: actions/checkout@v7.0.0
         with:
-          repository: lwmacct/260522-nsair-ci
+          repository: ${{ github.repository }}
           ref: main
 
       - name: Build workload matrix
@@ -92,12 +92,12 @@ jobs:
       matrix:
         workload: ${{ fromJson(needs.prepare.outputs.workloads) }}
     env:
-      NSAIR_WORKLOAD_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.workload }}
+      NSCELL_WORKLOAD_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.workload }}
     steps:
       - name: Checkout CI repository
         uses: actions/checkout@v7.0.0
         with:
-          repository: lwmacct/260522-nsair-ci
+          repository: ${{ github.repository }}
           ref: main
 
       - name: Open tmate session
@@ -124,7 +124,7 @@ jobs:
       - name: Show host capabilities
         run: bash scripts/ci.sh show-host-capabilities
 
-      - name: Setup Nsair runtime host
+      - name: Setup Nscell runtime host
         run: bash scripts/ci.sh setup-runtime-host
 
       - name: Verify CI gate mode
@@ -141,6 +141,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: nsair-${{ matrix.workload }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ env.NSAIR_CI_TEST_ROOT }}/runs/**/*.log
+          name: nscell-${{ matrix.workload }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.NSCELL_CI_TEST_ROOT }}/runs/**/*.log
           if-no-files-found: ignore

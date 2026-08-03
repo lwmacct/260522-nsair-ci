@@ -16,7 +16,7 @@ source "${_workload_dir}/library/images.sh"
 _bpf_lsm_active=false
 
 __detect_bpf_lsm() {
-  if sudo nsair daemon gate status |
+  if sudo nscell daemon gate status |
     jq -e '.enabled == true and .features.lsmActive == true and .auditEnabled == true' >/dev/null; then
     _bpf_lsm_active=true
     __log "BPF LSM policy and audit checks enabled"
@@ -31,18 +31,18 @@ __state_json() {
   local _cid _runtime_root
   local -a _runtime_roots=(
     /run/docker/runtime-runc/moby
-    /run/docker/runtime-runc/nsair
-    /run/nsair/runtime
+    /run/docker/runtime-runc/nscell
+    /run/nscell/runtime
   )
 
   _cid="$(docker inspect "$_name" --format '{{.Id}}')"
   for _runtime_root in "${_runtime_roots[@]}"; do
     if sudo test -f "${_runtime_root}/${_cid}/state.json"; then
-      sudo nsair --root "$_runtime_root" state "$_cid"
+      sudo nscell --root "$_runtime_root" state "$_cid"
       return
     fi
   done
-  echo "failed to locate nsair state.json for ${_name} (${_cid})" >&2
+  echo "failed to locate nscell state.json for ${_name} (${_cid})" >&2
   exit 1
 }
 
@@ -53,7 +53,7 @@ __check_devices() {
   __log "checking cgroup device policy diagnostics for ${_name}"
   _state_json="$(__state_json "$_name")"
   if ! grep -q '"cgroup_device_policy": {' <<<"$_state_json"; then
-    echo "nsair state did not expose cgroup_device_policy for ${_name}" >&2
+    echo "nscell state did not expose cgroup_device_policy for ${_name}" >&2
     printf '%s\n' "$_state_json" >&2
     exit 1
   fi
@@ -69,7 +69,7 @@ __run_probe() {
   local _name="$1"
   local _check="$2"
 
-  docker exec "$_name" nsair-ci-container-security-policy-probe "$_check"
+  docker exec "$_name" nscell-ci-container-security-policy-probe "$_check"
 }
 
 __assert_bpf_mount_audit() {
@@ -337,11 +337,11 @@ __expect_task_op_denied() {
   _status="$?"
   set -e
   if [[ "$_status" -eq 0 ]]; then
-    echo "Nsair task operation ${_operation} unexpectedly succeeded" >&2
+    echo "Nscell task operation ${_operation} unexpectedly succeeded" >&2
     exit 1
   fi
   if [[ "$_status" -ne 1 ]]; then
-    echo "Nsair task operation ${_operation} failed with status ${_status}, want EPERM status 1" >&2
+    echo "Nscell task operation ${_operation} failed with status ${_status}, want EPERM status 1" >&2
     exit 1
   fi
 }
@@ -384,9 +384,9 @@ __assert_xattr_negative_audits() {
   local _log_start="$1"
   local _profile="$2"
 
-  __assert_bpf_xattr_audit "$_log_start" "$_profile" setxattr deny user.nsair_ci_denied
-  __assert_bpf_xattr_audit "$_log_start" "$_profile" getxattr deny user.nsair_ci_denied
-  __assert_bpf_xattr_audit "$_log_start" "$_profile" removexattr deny user.nsair_ci_denied
+  __assert_bpf_xattr_audit "$_log_start" "$_profile" setxattr deny user.nscell_ci_denied
+  __assert_bpf_xattr_audit "$_log_start" "$_profile" getxattr deny user.nscell_ci_denied
+  __assert_bpf_xattr_audit "$_log_start" "$_profile" removexattr deny user.nscell_ci_denied
 }
 
 __assert_xattr_trusted_overlay_audits() {
@@ -434,15 +434,15 @@ __assert_no_bpf_kernel_interface_host_audit() {
 __check_host_bpf_gate_exemption() {
   local _log_start
 
-  __log "checking non-Nsair host process BPF gate exemption"
+  __log "checking non-Nscell host process BPF gate exemption"
   _log_start="$(wc -l <"$_daemon_log" 2>/dev/null || printf '0\n')"
   python3 - <<'PY'
 import os
 import shutil
 
-base = f"/tmp/nsair-ci-host-gate-exemption-{os.getpid()}"
+base = f"/tmp/nscell-ci-host-gate-exemption-{os.getpid()}"
 path = os.path.join(base, "target")
-name = b"user.nsair_ci_host_exempt"
+name = b"user.nscell_ci_host_exempt"
 value = b"host"
 
 try:
@@ -459,13 +459,13 @@ finally:
 
 print("host-bpf-gate-exemption-ok")
 PY
-  __assert_no_bpf_host_audit "$_log_start" user.nsair_ci_host_exempt
+  __assert_no_bpf_host_audit "$_log_start" user.nscell_ci_host_exempt
 }
 
 __check_host_kernel_interface_gate_exemption() {
   local _log_start
 
-  __log "checking non-Nsair host kernel-interface gate exemption"
+  __log "checking non-Nscell host kernel-interface gate exemption"
   _log_start="$(wc -l <"$_daemon_log" 2>/dev/null || printf '0\n')"
   python3 - <<'PY'
 import os
@@ -491,7 +491,7 @@ PY
 __check_host_task_gate_exemption() {
   local _log_start _host_pid
 
-  __log "checking non-Nsair host task gate exemption"
+  __log "checking non-Nscell host task gate exemption"
   _log_start="$(wc -l <"$_daemon_log" 2>/dev/null || printf '0\n')"
   sleep 3600 &
   _host_pid="$!"
@@ -508,12 +508,12 @@ __check_host_target_task_gate() {
   local _name="${_container_security_policy_name}-host-target"
   local _source_cgroup _log_start _host_pid
 
-  __log "checking Nsair container task gate against host target"
+  __log "checking Nscell container task gate against host target"
   docker rm -f "$_name" >/dev/null 2>&1 || true
   docker run -d \
     --name "$_name" \
     --hostname "$_name" \
-    --runtime nsair \
+    --runtime nscell \
     --cgroupns=private \
     --cap-add SYS_PTRACE \
     --cap-add KILL \
@@ -543,7 +543,7 @@ __check_cross_container_task_gate() {
   local _name_b="${_container_security_policy_name}-task-b"
   local _source_cgroup _target_cgroup _log_start _target_pid
 
-  __log "checking Nsair cross-container task gate"
+  __log "checking Nscell cross-container task gate"
   docker rm -f "$_name_a" "$_name_b" >/dev/null 2>&1 || true
   __cleanup() {
     if [[ -n "${_target_pid:-}" ]]; then
@@ -556,7 +556,7 @@ __check_cross_container_task_gate() {
     docker run -d \
       --name "$_name" \
       --hostname "$_name" \
-      --runtime nsair \
+      --runtime nscell \
       --cgroupns=private \
       --cap-add SYS_PTRACE \
       --cap-add KILL \
@@ -583,12 +583,12 @@ __check_proc_sys() {
   local _host_global_deny_sysctls _real_namespaced_sysctls
 
   __log "checking proc sys security policy for ${_name} (${_profile})"
-  _host_global_deny_sysctls="$(nsair daemon policy sysctl-list --profile "$_profile" --kind host-global-deny | tr '\n' ' ')"
-  _real_namespaced_sysctls="$(nsair daemon policy sysctl-list --profile "$_profile" --kind real-namespaced | tr '\n' ' ')"
+  _host_global_deny_sysctls="$(nscell daemon policy sysctl-list --profile "$_profile" --kind host-global-deny | tr '\n' ' ')"
+  _real_namespaced_sysctls="$(nscell daemon policy sysctl-list --profile "$_profile" --kind real-namespaced | tr '\n' ' ')"
   docker exec \
     -e "host_global_deny_sysctls=${_host_global_deny_sysctls}" \
     -e "real_namespaced_sysctls=${_real_namespaced_sysctls}" \
-    "$_name" nsair-ci-container-security-policy-probe proc-sys-policy
+    "$_name" nscell-ci-container-security-policy-probe proc-sys-policy
 }
 
 __run_profile() {
@@ -600,7 +600,7 @@ __run_profile() {
   docker run -d \
     --name "$_name" \
     --hostname "$_name" \
-    --runtime nsair \
+    --runtime nscell \
     --cgroupns=private \
     --cap-add SYS_ADMIN \
     --annotation "io.backend.security.profile=${_profile}" \
@@ -658,7 +658,7 @@ __main() {
 
   __require_cmd docker
   __require_cmd jq
-  __assert_nsair_ready
+  __assert_nscell_ready
   __init_ci_dirs
   __build_ci_image "$_container_security_policy_image" "$_workload_path" --build-arg "BASE_IMAGE=${_container_security_policy_base_image}"
 
@@ -676,7 +676,7 @@ __main() {
     __check_cross_container_task_gate
   fi
 
-  __assert_nsair_ready
+  __assert_nscell_ready
   echo "container-security-policy-validation-ok"
 }
 

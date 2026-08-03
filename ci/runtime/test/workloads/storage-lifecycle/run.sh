@@ -15,15 +15,15 @@ source "${_workload_dir}/library/images.sh"
 source "${_workload_dir}/library/oci.sh"
 
 _bundle="${_volume_root}/storage-lifecycle/bundle"
-_export_name="nsair-storage-export-${_workload_resource_id:-storage-lifecycle}"
+_export_name="nscell-storage-export-${_workload_resource_id:-storage-lifecycle}"
 _managed_volume_roots=(
-  /var/lib/nsair/buildkit
-  /var/lib/nsair/containerd
-  /var/lib/nsair/docker
-  /var/lib/nsair/k0s
-  /var/lib/nsair/kubelet
-  /var/lib/nsair/rancher-k3s
-  /var/lib/nsair/rancher-rke2
+  /var/lib/nscell/buildkit
+  /var/lib/nscell/containerd
+  /var/lib/nscell/docker
+  /var/lib/nscell/k0s
+  /var/lib/nscell/kubelet
+  /var/lib/nscell/rancher-k3s
+  /var/lib/nscell/rancher-rke2
 )
 
 __cleanup() {
@@ -76,7 +76,7 @@ __wait_for_managed_volume_cleanup() {
 }
 
 __container_exec() {
-  sudo nsair --root "$_oci_runtime_root" exec "$_storage_lifecycle_id" "$@"
+  sudo nscell --root "$_oci_runtime_root" exec "$_storage_lifecycle_id" "$@"
 }
 
 __assert_container_file() {
@@ -107,11 +107,11 @@ __assert_host_file() {
 
 __create_and_start() {
   sudo rm -f "${_bundle}/init.pid"
-  sudo nsair --root "$_oci_runtime_root" create \
+  sudo nscell --root "$_oci_runtime_root" create \
     --bundle "$_bundle" \
     --pid-file "${_bundle}/init.pid" \
     "$_storage_lifecycle_id"
-  sudo nsair --root "$_oci_runtime_root" start "$_storage_lifecycle_id"
+  sudo nscell --root "$_oci_runtime_root" start "$_storage_lifecycle_id"
 }
 
 __main() {
@@ -124,7 +124,7 @@ __main() {
 
   __require_cmd docker
   __require_cmd jq
-  __assert_nsair_ready
+  __assert_nscell_ready
   __init_ci_dirs
   trap __cleanup EXIT
 
@@ -136,7 +136,7 @@ __main() {
     "$_export_name"
   sudo install -d -m 0700 "${_bundle}/rootfs/var/lib/docker"
   printf 'seed-v1\n' | sudo tee "${_bundle}/rootfs/var/lib/docker/seed.txt" >/dev/null
-  _docker_volume="$(__managed_volume_path /var/lib/nsair/docker)"
+  _docker_volume="$(__managed_volume_path /var/lib/nscell/docker)"
 
   __log "validating managed-volume sync-in and runtime writes"
   __create_and_start
@@ -149,7 +149,7 @@ __main() {
   __assert_host_file "${_docker_volume}/runtime.txt" cycle-one
 
   __log "validating sync-out and same-ID container recreation"
-  sudo nsair --root "$_oci_runtime_root" delete --force "$_storage_lifecycle_id"
+  sudo nscell --root "$_oci_runtime_root" delete --force "$_storage_lifecycle_id"
   __assert_host_file "${_bundle}/rootfs/var/lib/docker/runtime.txt" cycle-one
   sudo test -d "$_docker_volume"
 
@@ -158,15 +158,15 @@ __main() {
   __assert_container_file /var/lib/docker/runtime.txt cycle-one
   __container_exec /bin/sh -c 'printf cycle-two > /var/lib/docker/runtime.txt'
   __container_exec /bin/sh -c 'printf second-file > /var/lib/docker/second.txt'
-  sudo nsair --root "$_oci_runtime_root" delete --force "$_storage_lifecycle_id"
+  sudo nscell --root "$_oci_runtime_root" delete --force "$_storage_lifecycle_id"
   __assert_host_file "${_bundle}/rootfs/var/lib/docker/runtime.txt" cycle-two
   __assert_host_file "${_bundle}/rootfs/var/lib/docker/second.txt" second-file
 
   __log "validating managed-volume cleanup after rootfs removal"
   __remove_oci_bundle "$_bundle"
   __wait_for_managed_volume_cleanup
-  sudo test ! -e "/run/nsair/containers/${_storage_lifecycle_id}.cap"
-  if sudo findmnt -rn -t fuse,fuse.nsairfs | grep -F "/${_storage_lifecycle_id}"; then
+  sudo test ! -e "/run/nscell/containers/${_storage_lifecycle_id}.cap"
+  if sudo findmnt -rn -t fuse,fuse.nscellfs | grep -F "/${_storage_lifecycle_id}"; then
     echo "VirtFS mount survived storage lifecycle cleanup" >&2
     exit 1
   fi
