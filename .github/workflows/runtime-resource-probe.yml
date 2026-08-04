@@ -64,7 +64,7 @@ jobs:
             util-linux
 
       - name: Run probe
-        run: sudo -E bash scripts/runtime-resource-probe.sh
+        run: sudo env STRICT="$STRICT" PROBE_LOG_DIR="$PROBE_LOG_DIR" bash scripts/runtime-resource-probe.sh
 
       - name: Upload probe logs
         if: always()
