@@ -257,6 +257,39 @@ __check_proc_sys() {
 	echo "proc-sys-security-ok"
 }
 
+__check_control_plane_isolation() {
+	for _path in /run/nscell/daemon.sock /run/nscell/containers; do
+		if [ -e "$_path" ] || [ -L "$_path" ]; then
+			echo "NSCell host control path is visible in the container: $_path" >&2
+			exit 1
+		fi
+	done
+
+	for _fd in /proc/1/fd/*; do
+		case "$_fd" in
+		/proc/1/fd/0 | /proc/1/fd/1 | /proc/1/fd/2)
+			;;
+		*)
+			_target="$(readlink "$_fd" 2>/dev/null || true)"
+			echo "container init inherited unexpected fd: $_fd -> $_target" >&2
+			exit 1
+			;;
+		esac
+	done
+
+	for _fd in /proc/self/fd/*; do
+		_target="$(readlink "$_fd" 2>/dev/null || true)"
+		case "$_target" in
+		*/run/nscell/*)
+			echo "NSCell host control fd is inherited by the container: $_fd -> $_target" >&2
+			exit 1
+			;;
+		esac
+	done
+
+	echo "control-plane-isolation-ok"
+}
+
 __main() {
 	case "${1:-}" in
 		cgroup-delegation)
@@ -283,8 +316,11 @@ __main() {
 		proc-sys-policy)
 			__check_proc_sys
 			;;
+		control-plane-isolation)
+			__check_control_plane_isolation
+			;;
 		*)
-			echo "usage: $0 {cgroup-delegation|privileged-resource-negative-policy|cgroup-subtree-mount-policy|kernel-interface-file-policy|cgroup-subtree-kernel-interface-file-policy|xattr-negative-policy|xattr-trusted-overlay-policy|proc-sys-policy}" >&2
+			echo "usage: $0 {cgroup-delegation|privileged-resource-negative-policy|cgroup-subtree-mount-policy|kernel-interface-file-policy|cgroup-subtree-kernel-interface-file-policy|xattr-negative-policy|xattr-trusted-overlay-policy|proc-sys-policy|control-plane-isolation}" >&2
 			exit 2
 			;;
 	esac

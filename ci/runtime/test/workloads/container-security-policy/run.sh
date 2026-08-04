@@ -608,6 +608,8 @@ __run_profile() {
     "$_container_security_policy_image" >/dev/null
 
   __check_devices "$_name"
+  __log "checking host control-plane isolation in ${_name}"
+  __run_probe "$_name" control-plane-isolation
   __log "checking cgroup subtree delegation in ${_name}"
   __run_probe "$_name" cgroup-delegation
   __log "checking privileged resource negative policy in ${_name}"
