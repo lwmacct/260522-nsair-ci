@@ -36,6 +36,7 @@ _oci_lifecycle_id="${NSCELL_CI_OCI_LIFECYCLE_ID:-oci-lifecycle${_workload_resour
 _resource_update_id="${NSCELL_CI_RESOURCE_UPDATE_ID:-resource-update${_workload_resource_id:+-${_workload_resource_id}}}"
 _storage_lifecycle_id="${NSCELL_CI_STORAGE_LIFECYCLE_ID:-storage-lifecycle${_workload_resource_id:+-${_workload_resource_id}}}"
 _daemon_fail_stop_id="${NSCELL_CI_DAEMON_FAIL_STOP_ID:-daemon-fail-stop${_workload_resource_id:+-${_workload_resource_id}}}"
+_daemon_crash_recovery_id="${NSCELL_CI_DAEMON_CRASH_RECOVERY_ID:-daemon-crash-recovery${_workload_resource_id:+-${_workload_resource_id}}}"
 _daemon_dial_retry_id="${NSCELL_CI_DAEMON_DIAL_RETRY_ID:-daemon-dial-retry${_workload_resource_id:+-${_workload_resource_id}}}"
 
 _docker_in_docker_name="${NSCELL_CI_DOCKER_IN_DOCKER_NAME:-nscell-docker-in-docker${_workload_resource_id:+-${_workload_resource_id}}}"
