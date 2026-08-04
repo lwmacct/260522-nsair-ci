@@ -37,6 +37,7 @@ _resource_update_id="${NSCELL_CI_RESOURCE_UPDATE_ID:-resource-update${_workload_
 _storage_lifecycle_id="${NSCELL_CI_STORAGE_LIFECYCLE_ID:-storage-lifecycle${_workload_resource_id:+-${_workload_resource_id}}}"
 _daemon_fail_stop_id="${NSCELL_CI_DAEMON_FAIL_STOP_ID:-daemon-fail-stop${_workload_resource_id:+-${_workload_resource_id}}}"
 _daemon_crash_recovery_id="${NSCELL_CI_DAEMON_CRASH_RECOVERY_ID:-daemon-crash-recovery${_workload_resource_id:+-${_workload_resource_id}}}"
+_rootfs_event_recovery_id="${NSCELL_CI_ROOTFS_EVENT_RECOVERY_ID:-rootfs-event-recovery${_workload_resource_id:+-${_workload_resource_id}}}"
 _daemon_dial_retry_id="${NSCELL_CI_DAEMON_DIAL_RETRY_ID:-daemon-dial-retry${_workload_resource_id:+-${_workload_resource_id}}}"
 _storage_crash_sync_in_id="${NSCELL_CI_STORAGE_CRASH_SYNC_IN_ID:-storage-crash-sync-in${_workload_resource_id:+-${_workload_resource_id}}}"
 _storage_crash_sync_out_id="${NSCELL_CI_STORAGE_CRASH_SYNC_OUT_ID:-storage-crash-sync-out${_workload_resource_id:+-${_workload_resource_id}}}"
