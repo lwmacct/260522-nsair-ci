@@ -81,7 +81,7 @@ __main() {
     jq -e --arg _id "$_oci_lifecycle_id" 'any(.[]; .id == $_id and .status == "created")' >/dev/null
   _pid="$(sudo cat "${_bundle}/init.pid")"
   sudo test -d "/proc/${_pid}"
-  sudo test -f "/run/nscell/containers/${_oci_lifecycle_id}.cap"
+  __container_capability_exists "$_oci_lifecycle_id"
   sudo findmnt -rn -T "/var/lib/nscellfs/${_oci_lifecycle_id}" -o FSTYPE |
     grep -Eq '^fuse(\.nscellfs)?$'
 
@@ -134,7 +134,10 @@ __main() {
     echo "deleted container remained in runtime list" >&2
     exit 1
   fi
-  sudo test ! -e "/run/nscell/containers/${_oci_lifecycle_id}.cap"
+  if __container_capability_exists "$_oci_lifecycle_id"; then
+    echo "container capability survived OCI delete" >&2
+    exit 1
+  fi
   if sudo findmnt -rn -t fuse,fuse.nscellfs | grep -F "/${_oci_lifecycle_id}"; then
     echo "VirtFS mount survived OCI delete" >&2
     exit 1

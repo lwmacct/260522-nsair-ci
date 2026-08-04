@@ -17,13 +17,13 @@ source "${_workload_dir}/library/oci.sh"
 _bundle="${_volume_root}/storage-lifecycle/bundle"
 _export_name="nscell-storage-export-${_workload_resource_id:-storage-lifecycle}"
 _managed_volume_roots=(
-  /var/lib/nscell/buildkit
-  /var/lib/nscell/containerd
-  /var/lib/nscell/docker
-  /var/lib/nscell/k0s
-  /var/lib/nscell/kubelet
-  /var/lib/nscell/rancher-k3s
-  /var/lib/nscell/rancher-rke2
+  /var/lib/nscell/work/buildkit
+  /var/lib/nscell/work/containerd
+  /var/lib/nscell/work/docker
+  /var/lib/nscell/work/k0s
+  /var/lib/nscell/work/kubelet
+  /var/lib/nscell/work/rancher-k3s
+  /var/lib/nscell/work/rancher-rke2
 )
 
 __cleanup() {
@@ -136,7 +136,7 @@ __main() {
     "$_export_name"
   sudo install -d -m 0700 "${_bundle}/rootfs/var/lib/docker"
   printf 'seed-v1\n' | sudo tee "${_bundle}/rootfs/var/lib/docker/seed.txt" >/dev/null
-  _docker_volume="$(__managed_volume_path /var/lib/nscell/docker)"
+  _docker_volume="$(__managed_volume_path /var/lib/nscell/work/docker)"
 
   __log "validating managed-volume sync-in and runtime writes"
   __create_and_start
@@ -165,7 +165,10 @@ __main() {
   __log "validating managed-volume cleanup after rootfs removal"
   __remove_oci_bundle "$_bundle"
   __wait_for_managed_volume_cleanup
-  sudo test ! -e "/run/nscell/containers/${_storage_lifecycle_id}.cap"
+  if __container_capability_exists "$_storage_lifecycle_id"; then
+    echo "container capability survived storage lifecycle cleanup" >&2
+    exit 1
+  fi
   if sudo findmnt -rn -t fuse,fuse.nscellfs | grep -F "/${_storage_lifecycle_id}"; then
     echo "VirtFS mount survived storage lifecycle cleanup" >&2
     exit 1

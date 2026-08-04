@@ -16,7 +16,7 @@ source "${_workload_dir}/library/oci.sh"
 
 _bundle="${_volume_root}/daemon-crash-recovery/bundle"
 _export_name="nscell-oci-export-${_workload_resource_id:-daemon-crash-recovery}"
-_docker_volume="/var/lib/nscell/docker/${_daemon_crash_recovery_id}"
+_docker_volume="/var/lib/nscell/work/docker/${_daemon_crash_recovery_id}"
 
 __cleanup() {
   sudo systemctl reset-failed nscell-daemon.service >/dev/null 2>&1 || true
@@ -46,7 +46,10 @@ __assert_recovered_state() {
 
   __wait_for_pid_exit "$_container_pid" "orphaned container init"
   sudo test ! -e "${_oci_runtime_root}/${_daemon_crash_recovery_id}"
-  sudo test ! -e "/run/nscell/containers/${_daemon_crash_recovery_id}.cap"
+  if __container_capability_exists "$_daemon_crash_recovery_id"; then
+    echo "container capability survived daemon crash recovery" >&2
+    return 1
+  fi
   if sudo findmnt -rn -t fuse,fuse.nscellfs |
     grep -F "/${_daemon_crash_recovery_id}"; then
     echo "VirtFS mount survived daemon crash recovery" >&2
@@ -100,7 +103,7 @@ __main() {
   __create_and_start
   _container_pid="$(sudo cat "${_bundle}/init.pid")"
   sudo test -d "/proc/${_container_pid}"
-  sudo test -f "/run/nscell/containers/${_daemon_crash_recovery_id}.cap"
+  __container_capability_exists "$_daemon_crash_recovery_id"
   sudo findmnt -rn -T "/var/lib/nscellfs/${_daemon_crash_recovery_id}" -o FSTYPE |
     grep -Eq '^fuse(\.nscellfs)?$'
   sudo nscell --root "$_oci_runtime_root" exec \

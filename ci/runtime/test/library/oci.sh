@@ -49,6 +49,19 @@ __remove_oci_bundle() {
   sudo rm -rf "$_bundle"
 }
 
+__container_capability_exists() {
+  local _id="$1"
+
+  sudo find /run/nscell/containers \
+    -mindepth 2 \
+    -maxdepth 2 \
+    -type f \
+    -name "${_id}.cap" \
+    -print \
+    -quit |
+    grep -q .
+}
+
 __host_cgroup_path() {
   local _pid="$1"
   local _relative

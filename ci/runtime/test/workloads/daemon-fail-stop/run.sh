@@ -71,7 +71,7 @@ __main() {
     jq -e '.status == "running" and .pid > 0' >/dev/null
   _pid="$(sudo cat "${_bundle}/init.pid")"
   sudo test -d "/proc/${_pid}"
-  sudo test -f "/run/nscell/containers/${_daemon_fail_stop_id}.cap"
+  __container_capability_exists "$_daemon_fail_stop_id"
   sudo findmnt -rn -T "/var/lib/nscellfs/${_daemon_fail_stop_id}" -o FSTYPE |
     grep -Eq '^fuse(\.nscellfs)?$'
 
@@ -86,7 +86,7 @@ __main() {
     echo "runtime state survived daemon shutdown: ${_oci_runtime_root}/${_daemon_fail_stop_id}" >&2
     exit 1
   fi
-  if sudo test -e "/run/nscell/containers/${_daemon_fail_stop_id}.cap"; then
+  if __container_capability_exists "$_daemon_fail_stop_id"; then
     echo "container capability survived daemon shutdown" >&2
     exit 1
   fi
