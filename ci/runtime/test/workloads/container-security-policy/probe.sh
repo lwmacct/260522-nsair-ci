@@ -290,6 +290,45 @@ __check_control_plane_isolation() {
 	echo "control-plane-isolation-ok"
 }
 
+__check_process_identity_isolation() {
+	if [ "$(id -u)" -ne 0 ] || [ "$(id -g)" -ne 0 ]; then
+		echo "identity probe must run as container uid/gid 0" >&2
+		exit 1
+	fi
+
+	read -r _uid_container _uid_host _uid_size </proc/self/uid_map
+	read -r _gid_container _gid_host _gid_size </proc/self/gid_map
+	for _value in \
+		"$_uid_container" "$_uid_host" "$_uid_size" \
+		"$_gid_container" "$_gid_host" "$_gid_size"; do
+		case "$_value" in
+		"" | *[!0-9]*)
+			echo "invalid process id mapping value: $_value" >&2
+			exit 1
+			;;
+		esac
+	done
+
+	if [ "$_uid_container" -ne 0 ] || [ "$_gid_container" -ne 0 ]; then
+		echo "container root mapping does not start at uid/gid 0" >&2
+		exit 1
+	fi
+	if [ "$_uid_host" -eq 0 ] || [ "$_gid_host" -eq 0 ]; then
+		echo "container root process maps to host uid/gid 0" >&2
+		exit 1
+	fi
+	if [ "$_uid_host" -ne "$_gid_host" ]; then
+		echo "container process uid/gid mappings use different host bases" >&2
+		exit 1
+	fi
+	if [ "$_uid_size" -lt 65536 ] || [ "$_gid_size" -lt 65536 ]; then
+		echo "container process uid/gid mapping range is smaller than 65536" >&2
+		exit 1
+	fi
+
+	echo "process-identity-isolation-ok host-base=${_uid_host} size=${_uid_size}"
+}
+
 __main() {
 	case "${1:-}" in
 		cgroup-delegation)
@@ -319,8 +358,11 @@ __main() {
 		control-plane-isolation)
 			__check_control_plane_isolation
 			;;
+		process-identity-isolation)
+			__check_process_identity_isolation
+			;;
 		*)
-			echo "usage: $0 {cgroup-delegation|privileged-resource-negative-policy|cgroup-subtree-mount-policy|kernel-interface-file-policy|cgroup-subtree-kernel-interface-file-policy|xattr-negative-policy|xattr-trusted-overlay-policy|proc-sys-policy|control-plane-isolation}" >&2
+			echo "usage: $0 {cgroup-delegation|privileged-resource-negative-policy|cgroup-subtree-mount-policy|kernel-interface-file-policy|cgroup-subtree-kernel-interface-file-policy|xattr-negative-policy|xattr-trusted-overlay-policy|proc-sys-policy|control-plane-isolation|process-identity-isolation}" >&2
 			exit 2
 			;;
 	esac

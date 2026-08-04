@@ -12,8 +12,12 @@ cd "$_repo_root"
 source "${_workload_dir}/library/env.sh"
 source "${_workload_dir}/library/readiness.sh"
 source "${_workload_dir}/library/images.sh"
+source "${_workload_dir}/library/oci.sh"
 
 _bpf_lsm_active=false
+_identity_bundle="${_volume_root}/container-security-policy/invalid-host-root-map"
+_identity_id="container-security-host-root-map${_workload_resource_id:+-${_workload_resource_id}}"
+_identity_export_name="nscell-oci-export-identity${_workload_resource_id:+-${_workload_resource_id}}"
 
 __detect_bpf_lsm() {
   if sudo nscell daemon gate status |
@@ -70,6 +74,74 @@ __run_probe() {
   local _check="$2"
 
   docker exec "$_name" nscell-ci-container-security-policy-probe "$_check"
+}
+
+__check_process_identity_isolation() {
+  local _name="$1"
+  local _pid _host_id _kind _ns _host_ns _container_ns
+
+  __run_probe "$_name" process-identity-isolation
+  _pid="$(docker inspect "$_name" --format '{{.State.Pid}}')"
+  if [[ ! "$_pid" =~ ^[1-9][0-9]*$ ]]; then
+    echo "invalid container init pid for ${_name}: ${_pid}" >&2
+    exit 1
+  fi
+
+  for _kind in Uid Gid; do
+    _host_id="$(sudo awk -v _kind="${_kind}:" '$1 == _kind { print $3; exit }' "/proc/${_pid}/status")"
+    if [[ ! "$_host_id" =~ ^[0-9]+$ ]] || [[ "$_host_id" == "0" ]]; then
+      echo "container init maps to invalid host ${_kind,,}: ${_host_id}" >&2
+      exit 1
+    fi
+  done
+
+  for _ns in user mnt pid ipc uts net cgroup; do
+    _host_ns="$(sudo readlink "/proc/1/ns/${_ns}")"
+    _container_ns="$(sudo readlink "/proc/${_pid}/ns/${_ns}")"
+    if [[ -z "$_host_ns" || -z "$_container_ns" || "$_host_ns" == "$_container_ns" ]]; then
+      echo "container ${_name} shares host ${_ns} namespace: ${_container_ns}" >&2
+      exit 1
+    fi
+  done
+  echo "process-namespace-isolation-ok ${_name} pid=${_pid}"
+}
+
+__check_host_root_mapping_rejected() {
+  local _config_tmp _create_log
+
+  __log "checking rejection of process mappings to host uid/gid 0"
+  __remove_oci_container "$_oci_runtime_root" "$_identity_id"
+  __remove_oci_bundle "$_identity_bundle"
+  __prepare_oci_bundle \
+    "$_oci_base_image" \
+    "$_identity_bundle" \
+    '["/bin/sh", "-c", "sleep 30"]' \
+    "$_identity_export_name"
+
+  _config_tmp="$(mktemp)"
+  _create_log="${_log_root}/container-security-host-root-map.log"
+  sudo jq \
+    '.linux.uidMappings = [{"containerID": 0, "hostID": 0, "size": 65536}]
+      | .linux.gidMappings = [{"containerID": 0, "hostID": 0, "size": 65536}]' \
+    "${_identity_bundle}/config.json" >"$_config_tmp"
+  sudo install -m 0600 "$_config_tmp" "${_identity_bundle}/config.json"
+  rm -f "$_config_tmp"
+
+  if sudo nscell --root "$_oci_runtime_root" create \
+    --bundle "$_identity_bundle" "$_identity_id" >"$_create_log" 2>&1; then
+    echo "OCI create accepted process uid/gid mappings to host ID 0" >&2
+    exit 1
+  fi
+  if ! grep -Eq 'host ID 0|breaks container isolation' "$_create_log"; then
+    echo "OCI create failed without the expected host-root mapping rejection" >&2
+    cat "$_create_log" >&2
+    exit 1
+  fi
+  if sudo test -e "${_oci_runtime_root}/${_identity_id}" || __container_capability_exists "$_identity_id"; then
+    echo "rejected host-root mapping left runtime or capability state" >&2
+    exit 1
+  fi
+  echo "host-root-process-mapping-rejected-ok"
 }
 
 __assert_bpf_mount_audit() {
@@ -607,6 +679,8 @@ __run_profile() {
     --label "io.backend.security.profile=${_profile}" \
     "$_container_security_policy_image" >/dev/null
 
+  __log "checking process identity and namespace isolation in ${_name}"
+  __check_process_identity_isolation "$_name"
   __check_devices "$_name"
   __log "checking host control-plane isolation in ${_name}"
   __run_probe "$_name" control-plane-isolation
@@ -648,6 +722,9 @@ __run_profile() {
 __main() {
   if [[ "${1:-}" == "cleanup" ]]; then
     __require_cmd docker
+    __remove_oci_container "$_oci_runtime_root" "$_identity_id"
+    __remove_oci_bundle "$_identity_bundle"
+    docker rm -f "$_identity_export_name" >/dev/null 2>&1 || true
     docker rm -f \
       "${_container_security_policy_name}-default" \
       "${_container_security_policy_name}-dind" \
@@ -665,6 +742,7 @@ __main() {
   __build_ci_image "$_container_security_policy_image" "$_workload_path" --build-arg "BASE_IMAGE=${_container_security_policy_base_image}"
 
   __detect_bpf_lsm
+  __check_host_root_mapping_rejected
   if [[ "$_bpf_lsm_active" == "true" ]]; then
     __check_host_bpf_gate_exemption
     __check_host_kernel_interface_gate_exemption
