@@ -28,18 +28,8 @@ isolate one or more failing workloads; an empty value always means the full
 suite.
 
 The workflow is always started through `workflow_dispatch`, either manually or
-by the product release workflow. Every run has a caller-supplied `release_id`,
-so the product workflow can locate the exact run and wait for its result. The
-run and its billing, matrix jobs, logs, and artifacts therefore remain in this
-public repository. It
+asynchronously by the product release workflow. The run and its billing, matrix
+jobs, logs, and artifacts therefore remain in this public repository. It
 installs ORAS, fetches the selected linux/amd64 image manifest and layers,
 extracts `/usr/local/bin/nscell`, then installs the binary and the
 `nscell-daemon.service` systemd unit on the runner.
-
-`gate_mode=ci` runs on GitHub-hosted `ubuntu-24.04` runners and validates the
-complete workload matrix with the non-enforcing in-memory gate. Release strict
-validation uses `gate_mode=strict`, the `container-security-policy` workload,
-and runner labels `["self-hosted","linux","x64","nscell-bpf-lsm"]`. A runner
-with that label must boot a kernel whose active LSM list includes `bpf`; strict
-validation requires a loaded, enforcing, audited BPF LSM gate and never falls
-back to CI mode.

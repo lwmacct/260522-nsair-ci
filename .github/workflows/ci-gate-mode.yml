@@ -1,5 +1,4 @@
 name: NSCell CI Gate Mode
-run-name: NSCell ${{ inputs.gate_mode }} gate / ${{ inputs.release_id }}
 
 on:
   workflow_dispatch:
@@ -8,24 +7,6 @@ on:
         description: Public image containing the NSCell multi-role binary
         required: true
         default: ghcr.io/lwmacct/260522-nscell:latest
-        type: string
-      release_id:
-        description: Correlation ID supplied by the release workflow
-        required: true
-        default: manual
-        type: string
-      gate_mode:
-        description: BPF LSM gate mode to validate
-        required: true
-        default: ci
-        type: choice
-        options:
-          - ci
-          - strict
-      runner_labels:
-        description: JSON array of runner labels used by workload jobs
-        required: true
-        default: '["ubuntu-24.04"]'
         type: string
       debug_tmate:
         description: Open an interactive SSH session before setup
@@ -44,7 +25,7 @@ on:
         type: string
 
 concurrency:
-  group: nscell-${{ inputs.gate_mode }}-gate-${{ inputs.nscell_image }}-${{ inputs.workloads || 'all' }}
+  group: nscell-ci-gate-mode-${{ inputs.nscell_image }}-${{ inputs.workloads || 'all' }}
   cancel-in-progress: true
 
 permissions:
@@ -56,7 +37,7 @@ defaults:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  NSCELL_GATE_MODE: ${{ inputs.gate_mode }}
+  NSCELL_GATE_MODE: ci
   NSCELL_CI_TEST_ROOT: /tmp/nscell
   NSCELL_CI_IMAGE_CACHE_DIR: /tmp/nscell/images
   NSCELL_IMAGE: ${{ inputs.nscell_image || 'ghcr.io/lwmacct/260522-nscell:latest' }}
@@ -104,7 +85,7 @@ jobs:
   runtime-test:
     name: Runtime workload / ${{ matrix.workload }}
     needs: prepare
-    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     strategy:
       fail-fast: false

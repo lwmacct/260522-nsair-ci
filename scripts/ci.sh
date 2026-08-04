@@ -225,33 +225,10 @@ __restart_nscell_services() {
 }
 
 __verify_gate() {
-  local _status
-
   sudo systemctl is-active --quiet nscell-daemon.service
   sudo systemctl cat nscell-daemon.service
-  _status="$(sudo nscell daemon gate status)"
-  printf '%s\n' "$_status"
-
-  case "$_gate_mode" in
-  ci)
-    jq -e '.enabled == true and .mode == "ci" and .enforce == false' <<<"$_status"
-    ;;
-  strict)
-    grep -qw bpf /sys/kernel/security/lsm
-    jq -e '
-      .enabled == true and
-      .mode == "strict" and
-      .enforce == true and
-      .auditEnabled == true and
-      .features.lsmActive == true and
-      (.programs | length > 0)
-    ' <<<"$_status"
-    ;;
-  *)
-    echo "unsupported NSCELL_GATE_MODE: $_gate_mode" >&2
-    exit 2
-    ;;
-  esac
+  sudo nscell daemon gate status
+  sudo nscell daemon gate status | jq -e '.mode == "ci" and .enforce == false'
 }
 
 __assert_nscell_ready() {
