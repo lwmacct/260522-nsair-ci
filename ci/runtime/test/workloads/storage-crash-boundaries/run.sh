@@ -212,7 +212,7 @@ __assert_sync_in_recovery() {
 }
 
 __assert_sync_out_recovery() {
-  local _daemon_pid _container_pid _backing
+  local _daemon_pid _container_pid _backing _delete_status=0
 
   __prepare_oci_bundle \
     "$_oci_base_image" \
@@ -235,8 +235,10 @@ __assert_sync_out_recovery() {
   __log "killing the daemon during a partial managed-volume SyncOut"
   __arm_crash sync-out "$_storage_crash_sync_out_id"
   _daemon_pid="$(systemctl show --property MainPID --value nscell-daemon.service)"
-  if timeout 45s sudo nscell --root "$_oci_runtime_root" delete --force "$_storage_crash_sync_out_id"; then
-    echo "OCI delete unexpectedly succeeded after SyncOut crash" >&2
+  timeout 45s sudo nscell --root "$_oci_runtime_root" delete --force "$_storage_crash_sync_out_id" ||
+    _delete_status=$?
+  if ((_delete_status == 124)); then
+    echo "OCI delete timed out after SyncOut crash" >&2
     return 1
   fi
   __assert_daemon_was_killed "$_daemon_pid" "sync-out:${_storage_crash_sync_out_id}"
