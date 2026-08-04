@@ -9,7 +9,12 @@ on:
         default: ubuntu-24.04
         type: choice
         options:
+          - ubuntu-26.04
+          - ubuntu-26.04-arm
           - ubuntu-24.04
+          - ubuntu-24.04-arm
+          - ubuntu-22.04
+          - ubuntu-22.04-arm
       strict:
         description: Fail when a required runtime capability is missing
         required: true
