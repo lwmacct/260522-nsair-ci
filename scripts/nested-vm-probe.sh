@@ -143,11 +143,13 @@ __boot_guest() {
 	set -e
 
 	cat "$_qemu_log" | tee -a "$_summary"
-	if [[ "$_qemu_status" != "0" ]]; then
-		echo "qemu exited with status ${_qemu_status}" >&2
+	if ! grep -q '^nscell-nested-vm-bpf-lsm-ok$' "$_qemu_log"; then
+		echo "guest did not report successful BPF LSM probe (qemu status ${_qemu_status})" >&2
 		return 1
 	fi
-	grep -q '^nscell-nested-vm-bpf-lsm-ok$' "$_qemu_log"
+	if [[ "$_qemu_status" != "0" ]]; then
+		echo "qemu exited with status ${_qemu_status} after guest poweroff" | tee -a "$_summary"
+	fi
 }
 
 __main() {
