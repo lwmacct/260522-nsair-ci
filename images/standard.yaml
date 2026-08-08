@@ -404,6 +404,23 @@ files:
   types:
   - vm
 
+- path: /etc/test-vm-profile
+  generator: dump
+  mode: 0644
+  content: |-
+    IMAGE_PROFILE=standard
+    IMAGE_CONTRACT=1
+  types:
+  - vm
+
+- path: /etc/apt/apt.conf.d/99force-ipv4
+  generator: dump
+  mode: 0644
+  content: |-
+    Acquire::ForceIPv4 "true";
+  types:
+  - vm
+
 - path: /etc/sudoers.d/90-incus
   generator: dump
   mode: 0440
@@ -536,11 +553,14 @@ packages:
     - git
     - iproute2
     - iptables
+    - iputils-ping
     - jq
     - kmod
     - libseccomp-dev
     - libseccomp2
+    - netcat-openbsd
     - pkg-config
+    - procps
     - python3
     - rsync
     - uidmap
@@ -635,6 +655,29 @@ actions:
 
     usermod -aG docker ubuntu
     systemctl enable docker.service
+  releases:
+  - noble
+  architectures:
+  - amd64
+  types:
+  - vm
+
+- trigger: post-packages
+  action: |-
+    #!/bin/sh
+    set -eux
+
+    ORAS_VERSION=1.3.3
+    ORAS_SHA256=9ce999f8d2de03fc03968b29d743077a58783e545e5eaa53917ca177352d0e59
+    ORAS_ARCHIVE="/tmp/oras_${ORAS_VERSION}_linux_amd64.tar.gz"
+    curl -fsSL \
+      "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz" \
+      -o "${ORAS_ARCHIVE}"
+    printf '%s  %s\n' "${ORAS_SHA256}" "${ORAS_ARCHIVE}" | sha256sum --check -
+    tar -xzf "${ORAS_ARCHIVE}" -C /usr/local/bin oras
+    chmod 0755 /usr/local/bin/oras
+    oras version
+    rm -f "${ORAS_ARCHIVE}"
   releases:
   - noble
   architectures:

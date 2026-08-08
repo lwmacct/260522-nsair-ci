@@ -1,20 +1,25 @@
-name: Build NSCell test VM image
+name: Build test VM images
 
 on:
   push:
     branches:
       - main
     paths:
-      - images/test-vm.yaml
+      - images/*.yaml
       - .github/workflows/build-test-vm-image.yml
   workflow_dispatch:
+    inputs:
+      images:
+        description: Space-separated image profiles, or all
+        required: true
+        default: standard
+        type: string
 
 permissions:
   contents: read
-  packages: write
 
 concurrency:
-  group: nscell-test-vm-image-${{ github.ref }}
+  group: test-vm-images-${{ github.ref }}
   cancel-in-progress: false
 
 defaults:
@@ -33,10 +38,107 @@ env:
   VARIANT: default
 
 jobs:
+  prepare:
+    name: Prepare image matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      images: ${{ steps.matrix.outputs.images }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select image profiles
+        id: matrix
+        env:
+          BEFORE_SHA: ${{ github.event.before || '' }}
+          EVENT_NAME: ${{ github.event_name }}
+          SELECTED_IMAGES: ${{ inputs.images || '' }}
+        run: |
+          __all_images() {
+            find images -maxdepth 1 -type f -name '*.yaml' -printf '%f\n' |
+              sed "s/\.yaml$//" |
+              sort
+          }
+
+          __main() {
+            local _before_sha _image _images_json _raw
+            local -a _images=()
+
+            if [[ "${EVENT_NAME}" == workflow_dispatch ]]; then
+              _raw="${SELECTED_IMAGES//,/ }"
+              if [[ "${_raw}" == all ]]; then
+                mapfile -t _images < <(__all_images)
+              else
+                read -r -a _images <<<"${_raw}"
+              fi
+            else
+              _before_sha="${BEFORE_SHA}"
+              if [[ -z "${_before_sha}" || "${_before_sha}" =~ ^0+$ ]] ||
+                ! git cat-file -e "${_before_sha}^{commit}" 2>/dev/null; then
+                mapfile -t _images < <(__all_images)
+              elif git diff --name-only "${_before_sha}" "${GITHUB_SHA}" -- \
+                .github/workflows/build-test-vm-image.yml |
+                grep -qx '.github/workflows/build-test-vm-image.yml'; then
+                mapfile -t _images < <(__all_images)
+              else
+                mapfile -t _images < <(
+                  git diff --name-only "${_before_sha}" "${GITHUB_SHA}" -- 'images/*.yaml' |
+                    while IFS= read -r _image; do
+                      [[ -f "${_image}" ]] || continue
+                      basename "${_image}" .yaml
+                    done |
+                    sort -u
+                )
+              fi
+            fi
+
+            if ((${#_images[@]} == 0)); then
+              echo "no image profiles selected" >&2
+              return 2
+            fi
+
+            mapfile -t _images < <(printf '%s\n' "${_images[@]}" | sort -u)
+            for _image in "${_images[@]}"; do
+              if [[ ! "${_image}" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+                echo "invalid image profile: ${_image}" >&2
+                return 2
+              fi
+              if [[ ! -f "images/${_image}.yaml" ]]; then
+                echo "unknown image profile: ${_image}" >&2
+                return 2
+              fi
+            done
+
+            _images_json="$(printf '%s\n' "${_images[@]}" | jq -R . | jq -sc .)"
+            echo "images=${_images_json}" >> "${GITHUB_OUTPUT}"
+            {
+              echo "## Selected image profiles"
+              echo
+              printf -- "- \`%s\`\n" "${_images[@]}"
+            } >> "${GITHUB_STEP_SUMMARY}"
+          }
+
+          __main "$@"
+
   build:
-    name: Ubuntu 24.04 / amd64 / VM
+    name: ${{ matrix.image }} / Ubuntu 24.04 / AMD64
+    needs: prepare
     runs-on: ubuntu-24.04
     timeout-minutes: 150
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJson(needs.prepare.outputs.images) }}
+    env:
+      IMAGE_NAME: ${{ matrix.image }}
+      IMAGE_DEFINITION: images/${{ matrix.image }}.yaml
+      OUTPUT_DIR_NAME: artifact-images-${{ matrix.image }}
 
     steps:
       - name: Checkout repository
@@ -57,60 +159,74 @@ jobs:
 
       - name: Install Incus from Zabbly and build dependencies
         run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends \
-            btrfs-progs \
-            build-essential \
-            ca-certificates \
-            curl \
-            debootstrap \
-            dnsmasq-base \
-            dosfstools \
-            gdisk \
-            gpg \
-            gpg-agent \
-            jq \
-            ovmf \
-            qemu-system-modules-spice \
-            qemu-system-x86 \
-            qemu-utils \
-            rsync \
-            squashfs-tools \
-            xz-utils \
-            zstd
-          sudo install -d -m 0755 /etc/apt/keyrings
-          sudo curl -fsSL https://pkgs.zabbly.com/key.asc \
-            -o /etc/apt/keyrings/zabbly.asc
-          sudo tee /etc/apt/sources.list.d/zabbly-incus-stable.sources >/dev/null <<EOF
+          __main() {
+            local _architecture _codename
+
+            set -euo pipefail
+            sudo apt-get update
+            sudo apt-get install --yes --no-install-recommends \
+              btrfs-progs \
+              build-essential \
+              ca-certificates \
+              curl \
+              debootstrap \
+              dnsmasq-base \
+              dosfstools \
+              gdisk \
+              gpg \
+              gpg-agent \
+              jq \
+              ovmf \
+              qemu-system-modules-spice \
+              qemu-system-x86 \
+              qemu-utils \
+              rsync \
+              squashfs-tools \
+              xz-utils \
+              zstd
+            sudo install -d -m 0755 /etc/apt/keyrings
+            sudo curl -fsSL https://pkgs.zabbly.com/key.asc \
+              -o /etc/apt/keyrings/zabbly.asc
+            _codename="$(. /etc/os-release && echo "${VERSION_CODENAME}")"
+            _architecture="$(dpkg --print-architecture)"
+            sudo tee /etc/apt/sources.list.d/zabbly-incus-stable.sources >/dev/null <<EOF
           Enabled: yes
           Types: deb
           URIs: https://pkgs.zabbly.com/incus/stable
-          Suites: $(. /etc/os-release && echo "${VERSION_CODENAME}")
+          Suites: ${_codename}
           Components: main
-          Architectures: $(dpkg --print-architecture)
+          Architectures: ${_architecture}
           Signed-By: /etc/apt/keyrings/zabbly.asc
           EOF
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends incus
-          apt-cache policy incus
-          apt-cache policy incus | grep -q 'https://pkgs.zabbly.com/incus/stable'
+            sudo apt-get update
+            sudo apt-get install --yes --no-install-recommends incus
+            apt-cache policy incus
+            apt-cache policy incus | grep -q \
+              'https://pkgs.zabbly.com/incus/stable'
+          }
+
+          __main "$@"
 
       - name: Build and install distrobuilder ${{ env.DISTROBUILDER_VERSION }}
         env:
           GOFLAGS: >-
             -tags=containers_image_storage_stub,containers_image_docker_daemon_stub,containers_image_openpgp
         run: |
-          set -euo pipefail
-          mkdir -p "${RUNNER_TEMP}/distrobuilder-cache"
-          if [ ! -x "${RUNNER_TEMP}/distrobuilder-cache/distrobuilder" ]; then
-            GOBIN="${RUNNER_TEMP}/distrobuilder-cache" \
-              go install "github.com/lxc/distrobuilder/v3/distrobuilder@v${DISTROBUILDER_VERSION}"
-          fi
-          sudo install -m 0755 \
-            "${RUNNER_TEMP}/distrobuilder-cache/distrobuilder" \
-            /usr/local/bin/distrobuilder
-          distrobuilder --version
+          __main() {
+            set -euo pipefail
+
+            mkdir -p "${RUNNER_TEMP}/distrobuilder-cache"
+            if [[ ! -x "${RUNNER_TEMP}/distrobuilder-cache/distrobuilder" ]]; then
+              GOBIN="${RUNNER_TEMP}/distrobuilder-cache" \
+                go install "github.com/lxc/distrobuilder/v3/distrobuilder@v${DISTROBUILDER_VERSION}"
+            fi
+            sudo install -m 0755 \
+              "${RUNNER_TEMP}/distrobuilder-cache/distrobuilder" \
+              /usr/local/bin/distrobuilder
+            distrobuilder --version
+          }
+
+          __main "$@"
 
       - name: Setup ORAS ${{ env.ORAS_VERSION }}
         uses: oras-project/setup-oras@v2.0.1
@@ -126,72 +242,102 @@ jobs:
 
       - name: Validate image definition
         run: |
-          set -euo pipefail
-          sudo distrobuilder validate images/test-vm.yaml
+          __main() {
+            set -euo pipefail
+            sudo distrobuilder validate "${IMAGE_DEFINITION}"
+          }
+
+          __main "$@"
 
       - name: Build Incus VM image
         run: |
-          set -euo pipefail
-          echo "SERIAL=$(date -u +%Y%m%d_%H%M)" >> "${GITHUB_ENV}"
-          echo "OUTPUT_DIR=${RUNNER_TEMP}/nscell-test-vm-image" >> "${GITHUB_ENV}"
-          sudo mkdir -p "${RUNNER_TEMP}/nscell-test-vm-image"
-          sudo distrobuilder build-incus \
-            images/test-vm.yaml \
-            "${RUNNER_TEMP}/nscell-test-vm-image" \
-            --type=split \
-            --compression=xz \
-            --vm \
-            --timeout=5400 \
-            -o image.architecture="${ARCHITECTURE}" \
-            -o image.release="${RELEASE}" \
-            -o image.variant="${VARIANT}" \
-            -o image.description="NSCell test Ubuntu 24.04 AMD64 VM" \
-            -o image.serial="$(date -u +%Y%m%d_%H%M)" \
-            -o source.url="http://archive.ubuntu.com/ubuntu/"
-          sudo chown -R "$(id -u):$(id -g)" "${RUNNER_TEMP}/nscell-test-vm-image"
+          __main() {
+            local _serial
+
+            set -euo pipefail
+            _serial="$(date -u +%Y%m%d_%H%M)"
+            echo "SERIAL=${_serial}" >> "${GITHUB_ENV}"
+            sudo install -d -m 0755 "${RUNNER_TEMP}/${OUTPUT_DIR_NAME}"
+            sudo distrobuilder build-incus \
+              "${IMAGE_DEFINITION}" \
+              "${RUNNER_TEMP}/${OUTPUT_DIR_NAME}" \
+              --type=split \
+              --compression=xz \
+              --vm \
+              --timeout=5400 \
+              -o image.architecture="${ARCHITECTURE}" \
+              -o image.release="${RELEASE}" \
+              -o image.variant="${VARIANT}" \
+              -o image.description="Test VM ${IMAGE_NAME}: Ubuntu 24.04 AMD64" \
+              -o image.serial="${_serial}" \
+              -o source.url="http://archive.ubuntu.com/ubuntu/"
+            sudo chown -R "$(id -u):$(id -g)" \
+              "${RUNNER_TEMP}/${OUTPUT_DIR_NAME}"
+          }
+
+          __main "$@"
 
       - name: Check VM artifact files
         run: |
-          set -euo pipefail
-          test -s "${OUTPUT_DIR}/incus.tar.xz"
-          test -s "${OUTPUT_DIR}/disk.qcow2"
-          qemu-img check "${OUTPUT_DIR}/disk.qcow2"
+          __main() {
+            set -euo pipefail
+            test -s "${RUNNER_TEMP}/${OUTPUT_DIR_NAME}/incus.tar.xz"
+            test -s "${RUNNER_TEMP}/${OUTPUT_DIR_NAME}/disk.qcow2"
+            qemu-img check "${RUNNER_TEMP}/${OUTPUT_DIR_NAME}/disk.qcow2"
+          }
+
+          __main "$@"
 
       - name: Write checksums
         run: |
-          set -euo pipefail
-          (
-            cd "${OUTPUT_DIR}"
-            sha256sum incus.tar.xz disk.qcow2 > SHA256SUMS
-          )
+          __main() {
+            set -euo pipefail
+            (
+              cd "${RUNNER_TEMP}/${OUTPUT_DIR_NAME}"
+              sha256sum incus.tar.xz disk.qcow2 > SHA256SUMS
+            )
+          }
 
-      - name: Publish Incus VM image to GHCR with ORAS
+          __main "$@"
+
+      - name: Publish candidate to GHCR
         env:
           ORAS_ARTIFACT_TYPE_VM: application/vnd.linuxcontainers.incus.virtual-machine-image.v1
           ORAS_METADATA_TYPE: application/vnd.linuxcontainers.incus.metadata.v1+tar+xz
           ORAS_DISK_TYPE: application/vnd.linuxcontainers.incus.disk.v1+qcow2
           ORAS_CHECKSUM_TYPE: text/plain
         run: |
-          set -euo pipefail
-          _tag="nscell-test-ubuntu24.04-${ARCHITECTURE}-vm-${SERIAL}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          _stable_tag="nscell-test-ubuntu24.04-${ARCHITECTURE}-vm"
-          (
-            cd "${OUTPUT_DIR}"
-            oras push \
-              --artifact-type "${ORAS_ARTIFACT_TYPE_VM}" \
-              --annotation "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
-              --annotation "org.opencontainers.image.revision=${GITHUB_SHA}" \
-              --annotation "org.opencontainers.image.version=${SERIAL}" \
-              --annotation "org.opencontainers.image.description=NSCell test Ubuntu 24.04 AMD64 Incus VM" \
-              "${OCI_REPOSITORY}:${_tag}" \
-              "incus.tar.xz:${ORAS_METADATA_TYPE}" \
-              "disk.qcow2:${ORAS_DISK_TYPE}" \
-              "SHA256SUMS:${ORAS_CHECKSUM_TYPE}"
-          )
-          oras tag "${OCI_REPOSITORY}:${_tag}" "${_stable_tag}"
-          {
-            echo "## Published NSCell test VM image"
-            echo
-            echo "- Stable: \`${OCI_REPOSITORY}:${_stable_tag}\`"
-            echo "- Build: \`${OCI_REPOSITORY}:${_tag}\`"
-          } >> "${GITHUB_STEP_SUMMARY}"
+          __main() {
+            local _digest _full_sha _revision_tag _short_sha
+
+            set -euo pipefail
+            _full_sha="$(git rev-parse HEAD)"
+            _short_sha="${_full_sha:0:12}"
+            _revision_tag="artifact-images-${IMAGE_NAME}-sha-${_short_sha}"
+            (
+              cd "${RUNNER_TEMP}/${OUTPUT_DIR_NAME}"
+              oras push \
+                --artifact-type "${ORAS_ARTIFACT_TYPE_VM}" \
+                --annotation "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+                --annotation "org.opencontainers.image.revision=${_full_sha}" \
+                --annotation "org.opencontainers.image.version=${SERIAL}" \
+                --annotation "org.opencontainers.image.description=Test VM ${IMAGE_NAME}: Ubuntu 24.04 AMD64" \
+                --annotation "io.github.lwmacct.image.profile=${IMAGE_NAME}" \
+                "${OCI_REPOSITORY}:${_revision_tag}" \
+                "incus.tar.xz:${ORAS_METADATA_TYPE}" \
+                "disk.qcow2:${ORAS_DISK_TYPE}" \
+                "SHA256SUMS:${ORAS_CHECKSUM_TYPE}"
+            )
+            _digest="$(oras resolve "${OCI_REPOSITORY}:${_revision_tag}")"
+            [[ "${_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
+            {
+              echo "## Published test VM candidate"
+              echo
+              echo "- Profile: \`${IMAGE_NAME}\`"
+              echo "- Candidate: \`${OCI_REPOSITORY}:${_revision_tag}\`"
+              echo "- Immutable: \`${OCI_REPOSITORY}@${_digest}\`"
+              echo "- Stable tag updated: no"
+            } >> "${GITHUB_STEP_SUMMARY}"
+          }
+
+          __main "$@"

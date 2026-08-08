@@ -4,27 +4,31 @@ This repository owns a dedicated Ubuntu 24.04 AMD64 Incus VM image for NSCell
 runtime validation. The image is built with `distrobuilder`, while the runner
 installs Incus from the signed Zabbly source at `pkgs.zabbly.com`.
 
-The image definition is `images/test-vm.yaml`. It contains the Incus VM
+The first image profile is `images/standard.yaml`. It contains the Incus VM
 agent, the Docker runtime stack, FUSE and idmap utilities, diagnostics, and a
 guest GRUB command line that enables the BPF LSM. It does not contain an
 NSCell binary; each test workflow accepts an nscell OCI image, extracts its
 AMD64 binary on the GitHub runner, and exposes it to a disposable VM through a
 read-only Incus disk share.
 
-The image workflow publishes an OCI artifact to:
+The image workflow publishes a commit-addressed candidate such as:
 
 ```text
-ghcr.io/lwmacct/260522-nscell-ci:nscell-test-ubuntu24.04-amd64-vm
+ghcr.io/lwmacct/260522-nscell-ci:artifact-images-standard-sha-<12-char-commit>
 ```
+
+The stable profile tag is
+`ghcr.io/lwmacct/260522-nscell-ci:artifact-images-standard`. Building a
+candidate does not update this tag.
 
 GHCR artifacts are imported into Incus with ORAS before the VM is started.
 The artifact contains `incus.tar.xz`, `disk.qcow2`, and `SHA256SUMS`.
 
 ## Workflows
 
-- `Build NSCell test VM image` runs on image changes or manually. It
-  builds the split VM artifact, checks the qcow2 file, and publishes the stable
-  tag without starting a guest.
+- `Build test VM images` runs on profile changes or manually. It builds each
+  selected profile, checks the qcow2 file, and publishes only a
+  commit-addressed candidate without starting a guest.
 - `Test NSCell VM smoke` is a manual entry point (and is dispatched by the
   nscell release workflow when a release needs VM coverage). It checks BPF LSM,
   nscell daemon readiness, Docker runtime registration, and one `busybox`
