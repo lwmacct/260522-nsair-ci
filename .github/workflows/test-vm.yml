@@ -21,11 +21,6 @@ on:
         description: Space-separated targets, smoke, or all
         required: true
         type: string
-      max_parallel:
-        description: Maximum number of VM jobs running in parallel
-        required: false
-        default: 4
-        type: number
   workflow_dispatch:
     inputs:
       image_name:
@@ -47,11 +42,6 @@ on:
         required: true
         default: procfs-cpu
         type: string
-      max_parallel:
-        description: Maximum number of VM jobs running in parallel
-        required: true
-        default: 4
-        type: number
 
 permissions:
   contents: read
@@ -161,7 +151,7 @@ jobs:
     timeout-minutes: 120
     strategy:
       fail-fast: false
-      max-parallel: ${{ inputs.max_parallel || 4 }}
+      max-parallel: 4
       matrix:
         target: ${{ fromJson(needs.prepare.outputs.targets) }}
     steps:
