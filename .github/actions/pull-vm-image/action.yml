@@ -1,0 +1,91 @@
+name: Pull test VM image
+description: Pull and verify an Incus VM OCI artifact with ORAS
+
+inputs:
+  image_ref:
+    description: Full OCI image reference, preferably pinned by digest
+    required: true
+  output_dir_name:
+    description: Directory name created below RUNNER_TEMP
+    required: false
+    default: pulled-vm-image
+  registry:
+    description: OCI registry hostname
+    required: false
+    default: ghcr.io
+  registry_username:
+    description: OCI registry username
+    required: true
+  registry_token:
+    description: OCI registry token
+    required: true
+  oras_version:
+    description: ORAS CLI version
+    required: false
+    default: 1.3.3
+
+outputs:
+  image_dir:
+    description: Directory containing incus.tar.xz, disk.qcow2, and SHA256SUMS
+    value: ${{ steps.pull.outputs.image_dir }}
+  image_digest:
+    description: Resolved OCI manifest digest
+    value: ${{ steps.pull.outputs.image_digest }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup ORAS
+      uses: oras-project/setup-oras@v2.0.1
+      with:
+        version: ${{ inputs.oras_version }}
+
+    - name: Login to registry
+      uses: docker/login-action@v4.2.0
+      with:
+        registry: ${{ inputs.registry }}
+        username: ${{ inputs.registry_username }}
+        password: ${{ inputs.registry_token }}
+
+    - name: Pull and verify VM artifact
+      id: pull
+      shell: bash
+      env:
+        IMAGE_REF: ${{ inputs.image_ref }}
+        OUTPUT_DIR_NAME: ${{ inputs.output_dir_name }}
+      run: |
+        __main() {
+          local _image_digest _image_dir
+
+          set -euo pipefail
+          if [[ ! "${OUTPUT_DIR_NAME}" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]]; then
+            echo "invalid output directory name: ${OUTPUT_DIR_NAME}" >&2
+            return 2
+          fi
+          _image_dir="${RUNNER_TEMP}/${OUTPUT_DIR_NAME}"
+          if [[ -e "${_image_dir}" ]]; then
+            echo "VM image directory already exists: ${_image_dir}" >&2
+            return 1
+          fi
+          mkdir -p "${_image_dir}"
+          _image_digest="$(oras resolve "${IMAGE_REF}")"
+          [[ "${_image_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
+          oras pull --output "${_image_dir}" "${IMAGE_REF}"
+          (
+            cd "${_image_dir}"
+            sha256sum --check SHA256SUMS
+            qemu-img check disk.qcow2
+          )
+          {
+            echo "image_dir=${_image_dir}"
+            echo "image_digest=${_image_digest}"
+          } >> "${GITHUB_OUTPUT}"
+          {
+            echo "## Pulled test VM image"
+            echo
+            echo "- Requested: \`${IMAGE_REF}\`"
+            echo "- Digest: \`${_image_digest}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+        }
+
+        __main "$@"

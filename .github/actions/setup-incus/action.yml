@@ -1,0 +1,148 @@
+name: Setup Incus VM host
+description: Install Zabbly Incus and QEMU, initialize managed networking, and size one VM
+
+inputs:
+  host_memory_reserve_mib:
+    description: Memory reserved for the GitHub runner host
+    required: false
+    default: "4096"
+
+outputs:
+  vm_cpu_count:
+    description: Number of virtual CPUs available to the VM
+    value: ${{ steps.resources.outputs.vm_cpu_count }}
+  vm_memory_mib:
+    description: Memory available to the VM in MiB
+    value: ${{ steps.resources.outputs.vm_memory_mib }}
+  vm_memory_limit:
+    description: Incus memory limit value
+    value: ${{ steps.resources.outputs.vm_memory_limit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install Incus from Zabbly
+      shell: bash
+      run: |
+        __main() {
+          local _architecture _codename
+
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            ca-certificates \
+            curl \
+            dnsmasq-base \
+            gdisk \
+            iptables \
+            iputils-ping \
+            jq \
+            ovmf \
+            qemu-system-modules-spice \
+            qemu-system-x86 \
+            qemu-utils \
+            xz-utils
+          sudo install -d -m 0755 /etc/apt/keyrings
+          sudo curl -fsSL https://pkgs.zabbly.com/key.asc \
+            -o /etc/apt/keyrings/zabbly.asc
+          _codename="$(. /etc/os-release && echo "${VERSION_CODENAME}")"
+          _architecture="$(dpkg --print-architecture)"
+          sudo tee /etc/apt/sources.list.d/zabbly-incus-stable.sources >/dev/null <<EOF
+        Enabled: yes
+        Types: deb
+        URIs: https://pkgs.zabbly.com/incus/stable
+        Suites: ${_codename}
+        Components: main
+        Architectures: ${_architecture}
+        Signed-By: /etc/apt/keyrings/zabbly.asc
+        EOF
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends incus
+          apt-cache policy incus | grep -q \
+            'https://pkgs.zabbly.com/incus/stable'
+        }
+
+        __main "$@"
+
+    - name: Initialize Incus managed bridge
+      shell: bash
+      run: |
+        __ensure_forward_rule() {
+          local _chain="$1"
+          shift
+
+          if sudo iptables --wait 5 --check "${_chain}" "$@" 2>/dev/null; then
+            return
+          fi
+          sudo iptables --wait 5 --insert "${_chain}" 1 "$@"
+        }
+
+        __main() {
+          local _forward_chain=FORWARD
+          local _ipv4_address _ipv4_nat
+
+          set -euo pipefail
+          sudo systemctl enable --now incus.socket
+          sudo incus admin waitready
+          sudo incus admin init --minimal
+
+          if sudo iptables --wait 5 --numeric --list DOCKER-USER \
+            >/dev/null 2>&1; then
+            _forward_chain=DOCKER-USER
+          fi
+          __ensure_forward_rule "${_forward_chain}" \
+            --in-interface incusbr0 \
+            --jump ACCEPT
+          __ensure_forward_rule "${_forward_chain}" \
+            --out-interface incusbr0 \
+            --match conntrack \
+            --ctstate RELATED,ESTABLISHED \
+            --jump ACCEPT
+
+          test "$(sudo sysctl -n net.ipv4.ip_forward)" = 1
+          _ipv4_address="$(sudo incus network get incusbr0 ipv4.address)"
+          _ipv4_nat="$(sudo incus network get incusbr0 ipv4.nat)"
+          test -n "${_ipv4_address}"
+          test "${_ipv4_address}" != none
+          test "${_ipv4_nat}" = true
+          test -c /dev/kvm
+          sudo incus version
+          sudo incus network show incusbr0
+        }
+
+        __main "$@"
+
+    - name: Allocate VM resources
+      id: resources
+      shell: bash
+      env:
+        HOST_MEMORY_RESERVE_MIB: ${{ inputs.host_memory_reserve_mib }}
+      run: |
+        __main() {
+          local _host_cpu_count _host_memory_kib _reserve_mib _vm_memory_mib
+
+          set -euo pipefail
+          _reserve_mib="${HOST_MEMORY_RESERVE_MIB}"
+          [[ "${_reserve_mib}" =~ ^[0-9]+$ ]]
+          _host_cpu_count="$(nproc)"
+          _host_memory_kib="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)"
+          _vm_memory_mib="$(((_host_memory_kib / 1024) - _reserve_mib))"
+          if (( _host_cpu_count < 1 || _vm_memory_mib < 4096 )); then
+            echo "runner has insufficient resources for the test VM" >&2
+            return 1
+          fi
+          {
+            echo "vm_cpu_count=${_host_cpu_count}"
+            echo "vm_memory_mib=${_vm_memory_mib}"
+            echo "vm_memory_limit=${_vm_memory_mib}MiB"
+          } >> "${GITHUB_OUTPUT}"
+          {
+            echo "## VM host resources"
+            echo
+            echo "- CPUs: \`${_host_cpu_count}\`"
+            echo "- Host memory reserve: \`${_reserve_mib} MiB\`"
+            echo "- VM memory: \`${_vm_memory_mib} MiB\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+        }
+
+        __main "$@"

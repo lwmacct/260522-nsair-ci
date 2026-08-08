@@ -1,0 +1,209 @@
+name: Test workloads in VM
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        description: VM image profile name
+        required: false
+        default: standard
+        type: string
+      image_ref:
+        description: Explicit VM image OCI reference; empty uses the stable profile tag
+        required: false
+        default: ""
+        type: string
+      nscell_image:
+        description: Exact OCI image containing the NSCell binary
+        required: true
+        type: string
+      workloads:
+        description: Space-separated targets, smoke, or all
+        required: true
+        type: string
+      max_parallel:
+        description: Maximum number of VM jobs running in parallel
+        required: false
+        default: 4
+        type: number
+  workflow_dispatch:
+    inputs:
+      image_name:
+        description: VM image profile name
+        required: true
+        default: standard
+        type: string
+      image_ref:
+        description: Explicit VM image OCI reference; empty uses the stable profile tag
+        required: false
+        default: ""
+        type: string
+      nscell_image:
+        description: Exact OCI image containing the NSCell binary
+        required: true
+        type: string
+      workloads:
+        description: Space-separated targets, smoke, or all
+        required: true
+        default: procfs-cpu
+        type: string
+      max_parallel:
+        description: Maximum number of VM jobs running in parallel
+        required: true
+        default: 4
+        type: number
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: test-vm-${{ github.workflow }}-${{ github.ref }}-${{ inputs.image_name }}-${{ inputs.workloads }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  CI_REPOSITORY: lwmacct/260522-nscell-ci
+  VM_ARTIFACT_REPOSITORY: ghcr.io/lwmacct/260522-nscell-ci
+
+jobs:
+  prepare:
+    name: Prepare workload matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      image_ref: ${{ steps.matrix.outputs.image_ref }}
+      targets: ${{ steps.matrix.outputs.targets }}
+    steps:
+      - name: Checkout CI repository
+        uses: actions/checkout@v7.0.0
+        with:
+          repository: ${{ env.CI_REPOSITORY }}
+          ref: main
+          persist-credentials: false
+
+      - name: Validate image and workload selection
+        id: matrix
+        env:
+          IMAGE_NAME: ${{ inputs.image_name || 'standard' }}
+          IMAGE_REF: ${{ inputs.image_ref || '' }}
+          SELECTED_WORKLOADS: ${{ inputs.workloads || '' }}
+        run: |
+          __workload_names() {
+            local _workload_path
+
+            for _workload_path in ci/runtime/test/workloads/*; do
+              [[ -d "${_workload_path}" && -f "${_workload_path}/run.sh" ]] || continue
+              basename "${_workload_path}"
+            done | sort
+          }
+
+          __main() {
+            local _image_ref _raw _target _targets_json
+            local -a _targets=()
+
+            if [[ ! "${IMAGE_NAME}" =~ ^[a-z0-9][a-z0-9-]*$ ]] ||
+              [[ ! -f "images/${IMAGE_NAME}.yaml" ]]; then
+              echo "unknown image profile: ${IMAGE_NAME}" >&2
+              return 2
+            fi
+            _image_ref="${IMAGE_REF}"
+            if [[ -z "${_image_ref}" ]]; then
+              _image_ref="${VM_ARTIFACT_REPOSITORY}:artifact-images-${IMAGE_NAME}"
+            fi
+
+            _raw="${SELECTED_WORKLOADS//,/ }"
+            if [[ -z "${_raw}" ]]; then
+              echo "workloads must not be empty" >&2
+              return 2
+            fi
+            if [[ "${_raw}" == all ]]; then
+              mapfile -t _targets < <(__workload_names)
+            else
+              read -r -a _targets <<<"${_raw}"
+            fi
+            if ((${#_targets[@]} == 0)); then
+              echo "no workload targets selected" >&2
+              return 2
+            fi
+            mapfile -t _targets < <(printf '%s\n' "${_targets[@]}" | sort -u)
+            for _target in "${_targets[@]}"; do
+              if [[ "${_target}" != smoke &&
+                ! "${_target}" =~ ^[a-z0-9][a-z0-9-]*$ ]] ||
+                [[ "${_target}" != smoke &&
+                  ! -f "ci/runtime/test/workloads/${_target}/run.sh" ]]; then
+                echo "unknown workload target: ${_target}" >&2
+                return 2
+              fi
+            done
+
+            _targets_json="$(printf '%s\n' "${_targets[@]}" | jq -R . | jq -sc .)"
+            echo "image_ref=${_image_ref}" >> "${GITHUB_OUTPUT}"
+            echo "targets=${_targets_json}" >> "${GITHUB_OUTPUT}"
+            {
+              echo "## VM test matrix"
+              echo
+              echo "- Image profile: \`${IMAGE_NAME}\`"
+              echo "- Image reference: \`${_image_ref}\`"
+              printf -- "- Target: \`%s\`\n" "${_targets[@]}"
+            } >> "${GITHUB_STEP_SUMMARY}"
+          }
+
+          __main "$@"
+
+  test:
+    name: ${{ matrix.target }} / ${{ inputs.image_name || 'standard' }} VM
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ inputs.max_parallel || 4 }}
+      matrix:
+        target: ${{ fromJson(needs.prepare.outputs.targets) }}
+    steps:
+      - name: Checkout CI repository
+        uses: actions/checkout@v7.0.0
+        with:
+          repository: ${{ env.CI_REPOSITORY }}
+          ref: main
+          persist-credentials: false
+
+      - name: Setup Incus host
+        id: incus
+        uses: ./.github/actions/setup-incus
+
+      - name: Pull and verify VM image
+        id: image
+        uses: ./.github/actions/pull-vm-image
+        with:
+          image_ref: ${{ needs.prepare.outputs.image_ref }}
+          output_dir_name: artifact-${{ inputs.image_name || 'standard' }}-${{ matrix.target }}
+          registry_username: ${{ github.actor }}
+          registry_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run isolated workload VM
+        env:
+          NSCELL_VM_CI_REPO: ${{ github.workspace }}
+          NSCELL_VM_IMAGE_DIR: ${{ steps.image.outputs.image_dir }}
+          NSCELL_VM_IMAGE_REF: ${{ needs.prepare.outputs.image_ref }}
+          NSCELL_VM_CPU: ${{ steps.incus.outputs.vm_cpu_count }}
+          NSCELL_VM_MEMORY: ${{ steps.incus.outputs.vm_memory_limit }}
+          NSCELL_VM_LOG_DIR: ${{ runner.temp }}/test-vm-${{ matrix.target }}-logs
+          NSCELL_REGISTRY_USERNAME: ${{ github.actor }}
+          NSCELL_REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash .github/scripts/run-test-vm.sh \
+            "${{ matrix.target }}" \
+            "${{ inputs.nscell_image }}"
+
+      - name: Upload VM diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: test-vm-${{ inputs.image_name || 'standard' }}-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/test-vm-${{ matrix.target }}-logs/**
+          if-no-files-found: ignore

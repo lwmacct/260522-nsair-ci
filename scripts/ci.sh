@@ -8,7 +8,6 @@ _repo_root="$(cd "${_script_dir}/.." && pwd)"
 _runtime_test_dir="${_repo_root}/ci/runtime/test"
 
 _nscell_image="${NSCELL_IMAGE:-ghcr.io/lwmacct/260522-nscell:latest}"
-_nscell_binary="${NSCELL_BINARY:-}"
 _test_root="${NSCELL_CI_TEST_ROOT:-/tmp/nscell}"
 _image_cache_dir="${NSCELL_CI_IMAGE_CACHE_DIR:-${_test_root}/images}"
 _gate_mode="${NSCELL_GATE_MODE:-ci}"
@@ -55,9 +54,7 @@ __setup_runtime_host() {
   __require_cmd docker
   __require_cmd systemctl
   __require_cmd jq
-  if [[ -z "$_nscell_binary" ]]; then
-    __require_cmd oras
-  fi
+  __require_cmd oras
 
   __init_ci_dirs
   __install_nscell_binary
@@ -125,13 +122,7 @@ __install_nscell_binary() {
     xargs -r docker network rm >/dev/null 2>&1 || true
 
   rm -rf "$_artifact_bin_dir"
-  if [[ -n "$_nscell_binary" ]]; then
-    test -x "$_nscell_binary"
-    install -d -m 0755 "$_artifact_bin_dir"
-    install -m 0755 "$_nscell_binary" "${_artifact_bin_dir}/nscell"
-  else
-    __extract_nscell_binary_from_image "$_artifact_bin_dir"
-  fi
+  __extract_nscell_binary_from_image "$_artifact_bin_dir"
   "${_artifact_bin_dir}/nscell" version
 
   __log "installing nscell to ${_release}"
@@ -234,10 +225,22 @@ __restart_nscell_services() {
 }
 
 __verify_gate() {
+  local _expected_enforce
+
+  case "$_gate_mode" in
+  strict) _expected_enforce=true ;;
+  ci) _expected_enforce=false ;;
+  *)
+    echo "unsupported NSCELL_GATE_MODE: $_gate_mode" >&2
+    exit 2
+    ;;
+  esac
   sudo systemctl is-active --quiet nscell-daemon.service
   sudo systemctl cat nscell-daemon.service
   sudo nscell daemon gate status
-  sudo nscell daemon gate status | jq -e '.mode == "ci" and .enforce == false'
+  sudo nscell daemon gate status |
+    jq -e --arg _mode "$_gate_mode" --argjson _enforce "$_expected_enforce" \
+      '(.mode == $_mode) and (.enforce == $_enforce)'
 }
 
 __assert_nscell_ready() {
@@ -269,20 +272,6 @@ __run_workload() {
   bash "${_runtime_test_dir}/run.sh" run "$_workload"
 }
 
-__run_workloads() {
-  local -a _workloads=("$@")
-
-  if ((${#_workloads[@]} == 0)); then
-    read -r -a _workloads <<<"${NSCELL_CI_WORKLOADS:-procfs-cpu}"
-  fi
-  if ((${#_workloads[@]} == 0)); then
-    _workloads=(procfs-cpu)
-  fi
-  for _workload in "${_workloads[@]}"; do
-    __run_workload "$_workload"
-  done
-}
-
 __collect_logs() {
   local _log_dir="${_test_root}/runs/${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}/logs"
   sudo install -d -m 0755 "$_log_dir"
@@ -307,31 +296,16 @@ __collect_logs() {
   fi
 }
 
-__export_nscell_binary() {
-  local _dest="${1:?extract-nscell-binary requires a destination path}"
-  local _artifact_bin_dir="${_test_root}/nscell-export"
-
-  __require_cmd jq
-  __require_cmd oras
-  install -d -m 0755 "$_test_root" "$(dirname "$_dest")"
-  rm -rf "$_artifact_bin_dir"
-  __extract_nscell_binary_from_image "$_artifact_bin_dir"
-  install -m 0755 "${_artifact_bin_dir}/nscell" "$_dest"
-  rm -rf "$_artifact_bin_dir"
-}
-
 __usage() {
   cat <<'EOF'
 usage: scripts/ci.sh <command>
 
 commands:
-  extract-nscell-binary <destination>
   install-dependencies
   show-host-capabilities
   setup-runtime-host
   verify-gate
   run-workload <workload>
-  run-workloads [workload...]
   collect-logs
 EOF
 }
@@ -341,9 +315,6 @@ __main() {
   shift || true
 
   case "$_command" in
-  extract-nscell-binary)
-    __export_nscell_binary "${1:-}"
-    ;;
   install-dependencies)
     __install_dependencies
     ;;
@@ -358,9 +329,6 @@ __main() {
     ;;
   run-workload)
     __run_workload "${1:-}"
-    ;;
-  run-workloads)
-    __run_workloads "$@"
     ;;
   collect-logs)
     __collect_logs
