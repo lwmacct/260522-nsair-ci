@@ -7,8 +7,8 @@ on:
         description: Incus VM OCI artifact to import
         required: true
         type: string
-      nscell_ref:
-        description: nscell repository ref to build
+      nscell_image:
+        description: GHCR OCI image containing the nscell binary
         required: true
         type: string
       test_mode:
@@ -46,26 +46,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Checkout nscell source
-        uses: actions/checkout@v7.0.0
-        with:
-          repository: lwmacct/260522-nscell
-          ref: ${{ inputs.nscell_ref }}
-          path: nscell-source
-          persist-credentials: false
-
-      - name: Setup Go
-        uses: actions/setup-go@v6.5.0
-        with:
-          go-version-file: nscell-source/go.mod
-          cache-dependency-path: nscell-source/go.sum
-
       - name: Install host dependencies and Incus from Zabbly
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
-            build-essential \
             ca-certificates \
             curl \
             dnsmasq-base \
@@ -93,18 +78,6 @@ jobs:
           apt-cache policy incus
           apt-cache policy incus | grep -q 'https://pkgs.zabbly.com/incus/stable'
 
-      - name: Build nscell binary
-        working-directory: nscell-source
-        run: |
-          set -euo pipefail
-          mkdir -p "${RUNNER_TEMP}/nscell-bin"
-          CGO_ENABLED=1 go build \
-            -tags "seccomp idmapped_mnt" \
-            -ldflags "-s -w" \
-            -o "${RUNNER_TEMP}/nscell-bin/nscell" \
-            ./cmd/nscell
-          "${RUNNER_TEMP}/nscell-bin/nscell" version
-
       - name: Setup Incus
         run: |
           set -euo pipefail
@@ -128,7 +101,6 @@ jobs:
 
       - name: Run ${{ inputs.test_mode }} test in VM
         env:
-          NSCELL_VM_BINARY: ${{ runner.temp }}/nscell-bin/nscell
           NSCELL_VM_CI_REPO: ${{ github.workspace }}
           NSCELL_VM_LOG_DIR: ${{ runner.temp }}/nscell-vm-logs
         run: |
@@ -136,7 +108,8 @@ jobs:
           bash .github/scripts/run-nscell-test-vm.sh \
             "${{ inputs.image_ref }}" \
             "${{ inputs.test_mode }}" \
-            "${{ inputs.workloads }}"
+            "${{ inputs.workloads }}" \
+            "${{ inputs.nscell_image }}"
 
       - name: Upload VM diagnostics
         if: always()

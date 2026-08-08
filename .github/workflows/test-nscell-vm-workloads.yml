@@ -8,10 +8,10 @@ on:
         required: true
         default: ghcr.io/lwmacct/260522-nscell-ci:nscell-test-ubuntu24.04-amd64-vm
         type: string
-      nscell_ref:
-        description: nscell repository ref to build
+      nscell_image:
+        description: GHCR image containing the nscell binary
         required: true
-        default: main
+        default: ghcr.io/lwmacct/260522-nscell:latest
         type: string
       workloads:
         description: Space-separated workload names, or all
@@ -32,7 +32,7 @@ jobs:
     uses: ./.github/workflows/test-nscell-vm-reusable.yml
     with:
       image_ref: ${{ inputs.image_ref || 'ghcr.io/lwmacct/260522-nscell-ci:nscell-test-ubuntu24.04-amd64-vm' }}
-      nscell_ref: ${{ inputs.nscell_ref || 'main' }}
+      nscell_image: ${{ inputs.nscell_image || 'ghcr.io/lwmacct/260522-nscell:latest' }}
       test_mode: workloads
       workloads: ${{ inputs.workloads || 'procfs-cpu' }}
     permissions:

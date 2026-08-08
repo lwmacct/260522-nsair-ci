@@ -7,8 +7,8 @@ installs Incus from the signed Zabbly source at `pkgs.zabbly.com`.
 The image definition is `images/nscell-test-vm.yaml`. It contains the Incus VM
 agent, the Docker runtime stack, FUSE and idmap utilities, diagnostics, and a
 guest GRUB command line that enables the BPF LSM. It does not contain an
-NSCell binary; each test workflow builds the selected nscell ref and injects
-that binary into a disposable VM.
+NSCell binary; each test workflow accepts an nscell OCI image and extracts its
+binary inside a disposable VM.
 
 The image workflow publishes an OCI artifact to:
 
@@ -32,8 +32,8 @@ The artifact contains `incus.tar.xz`, `disk.qcow2`, and `SHA256SUMS`.
   suite. `workloads` accepts a space-separated list such as
   `procfs-cpu systemd-pid1`, or `all` for the complete suite.
 
-Both test workflows accept `nscell_ref`, so a branch or commit from
-`lwmacct/260522-nscell` can be tested without publishing a release image.
+Both test workflows accept `nscell_image`. The nscell release workflow passes
+an immutable digest, while manual runs can select any published nscell image.
 
 The VM runner always uses KVM and is AMD64-only. Failed runs upload the guest
 daemon log, systemd/Docker diagnostics, and `/data/nscell` test logs.

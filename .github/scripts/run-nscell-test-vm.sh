@@ -4,10 +4,10 @@ set -euo pipefail
 
 _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _repo_root="$(cd "${_script_dir}/../.." && pwd)"
-_image_ref="${1:?usage: run-nscell-test-vm.sh IMAGE_REF MODE [WORKLOADS]}"
+_image_ref="${1:?usage: run-nscell-test-vm.sh IMAGE_REF MODE WORKLOADS NSCELL_IMAGE}"
 _test_mode="${2:-smoke}"
 _workloads="${3:-procfs-cpu}"
-_binary="${NSCELL_VM_BINARY:?NSCELL_VM_BINARY must point to a built nscell binary}"
+_nscell_image="${4:?usage: run-nscell-test-vm.sh IMAGE_REF MODE WORKLOADS NSCELL_IMAGE}"
 _ci_repo="${NSCELL_VM_CI_REPO:?NSCELL_VM_CI_REPO must point to 260522-nscell-ci}"
 _oras_binary="${NSCELL_VM_ORAS_BINARY:-$(command -v oras)}"
 _run_id="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"
@@ -97,7 +97,6 @@ __launch_vm() {
 }
 
 __copy_inputs() {
-  sudo incus file push "${_binary}" "${_vm_name}/opt/nscell.test"
   sudo incus file push "${_oras_binary}" "${_vm_name}/opt/oras.test"
   sudo incus exec "${_vm_name}" -- mkdir -p /opt/nscell-ci
   tar --exclude=.git -C "${_ci_repo}" -cf - . |
@@ -106,80 +105,30 @@ __copy_inputs() {
 
 __configure_guest() {
   __log "configuring nscell in ${_vm_name}"
-  sudo incus exec "${_vm_name}" -- env NSCELL_TEST_MODE="${_test_mode}" NSCELL_TEST_WORKLOADS="${_workloads}" bash -s <<'EOF'
+  sudo incus exec "${_vm_name}" -- env NSCELL_TEST_MODE="${_test_mode}" NSCELL_TEST_WORKLOADS="${_workloads}" NSCELL_TEST_NSCELL_IMAGE="${_nscell_image}" bash -s <<'EOF'
 set -euo pipefail
 
 _test_mode="${NSCELL_TEST_MODE}"
 _workloads="${NSCELL_TEST_WORKLOADS}"
+_nscell_image="${NSCELL_TEST_NSCELL_IMAGE}"
 
-install -m 0755 /opt/nscell.test /usr/bin/nscell
-rm -f /opt/nscell.test
 install -m 0755 /opt/oras.test /usr/local/bin/oras
 rm -f /opt/oras.test
-nscell version
-
-install -d -m 0755 /etc/docker
-_docker_config=/etc/docker/daemon.json
-_docker_tmp=/etc/docker/daemon.json.nscell
-if test -s "${_docker_config}"; then
-  jq '.runtimes = ((.runtimes // {}) | .nscell = {"path": "/usr/bin/nscell", "runtimeArgs": []})' "${_docker_config}" >"${_docker_tmp}"
-else
-  jq -n '{"runtimes": {"nscell": {"path": "/usr/bin/nscell", "runtimeArgs": []}}}' >"${_docker_tmp}"
-fi
-install -m 0644 "${_docker_tmp}" "${_docker_config}"
-rm -f "${_docker_tmp}"
-
-cat >/etc/systemd/system/nscell-daemon.service <<'UNIT'
-[Unit]
-Description=nscell-daemon (NSCell VM test host)
-Before=docker.service containerd.service
-
-[Service]
-Type=notify
-ExecStart=/usr/bin/nscell daemon --log /var/log/nscell-daemon.log --gate-mode ci --metrics-listen 127.0.0.1:9618
-TimeoutStartSec=45
-TimeoutStopSec=90
-StartLimitInterval=0
-NotifyAccess=main
-OOMScoreAdjust=-500
-LimitNOFILE=infinity
-LimitNPROC=infinity
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-
-systemctl daemon-reload
-systemctl enable nscell-daemon.service
-systemctl enable docker.service
-systemctl stop nscell-daemon.service docker.service || true
-rm -f /run/nscell/daemon.sock /run/nscell/daemon.pid
-rm -rf /run/nscell/containers /var/lib/nscellfs/*
 mountpoint -q /sys/fs/bpf || mount -t bpf bpf /sys/fs/bpf
 grep -qw bpf /sys/kernel/security/lsm
-systemctl restart nscell-daemon.service
-systemctl restart docker.service
 
-for _attempt in $(seq 1 45); do
-  if systemctl is-active --quiet nscell-daemon.service && grep -q 'Ready ...' /var/log/nscell-daemon.log && docker info --format '{{json .Runtimes}}' | jq -e 'has("nscell")' >/dev/null; then
-    break
-  fi
-  sleep 2
-done
-systemctl is-active --quiet nscell-daemon.service
-grep -q 'Ready ...' /var/log/nscell-daemon.log
-docker info --format '{{json .Runtimes}}' | jq -e 'has("nscell")' >/dev/null
-nscell daemon gate status | jq -e '.mode == "ci" and .enforce == false' >/dev/null
+cd /opt/nscell-ci
+export NSCELL_IMAGE="${_nscell_image}"
+bash scripts/ci.sh install-dependencies
+bash scripts/ci.sh setup-runtime-host
+bash scripts/ci.sh verify-gate
 
 case "${_test_mode}" in
 smoke)
   docker run --rm --runtime nscell --pull=always busybox:1.37.0 sh -c 'test "$(uname -m)" = x86_64; test "$(cat /etc/hostname)" != ""; echo nscell-vm-smoke-ok'
   ;;
 workloads)
-  cd /opt/nscell-ci
-  bash scripts/ci.sh install-dependencies
   bash scripts/ci.sh show-host-capabilities
-  bash scripts/ci.sh verify-gate
   if [[ -z "${_workloads}" || "${_workloads}" == all ]]; then
     bash scripts/ci.sh run-workloads
   else
@@ -197,8 +146,8 @@ EOF
 }
 
 __main() {
-  test -x "${_binary}"
   test -d "${_ci_repo}"
+  test -x "${_oras_binary}"
   case "${_test_mode}" in
   smoke | workloads) ;;
   *)
