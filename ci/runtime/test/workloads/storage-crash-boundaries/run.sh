@@ -75,7 +75,8 @@ __install_rsync_wrapper() {
     '[Service]' \
     "Environment=PATH=${_wrapper_dir}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" |
     sudo tee "$_drop_in" >/dev/null
-  sudo rm -f "${_state_root}/mode" "${_state_root}/triggered" "${_state_root}/daemon.pid"
+  sudo rm -f "${_state_root}/mode" "${_state_root}/triggered" "${_state_root}/daemon.pid" \
+    "${_state_root}/invocations.log" "${_state_root}/rsync-output.log"
   sudo systemctl daemon-reload
   sudo systemctl restart nscell-daemon.service
   __assert_nscell_ready
@@ -86,7 +87,8 @@ __arm_crash() {
   local _id="$2"
 
   printf '%s:%s\n' "$_mode" "$_id" | sudo tee "${_state_root}/mode" >/dev/null
-  sudo rm -f "${_state_root}/triggered" "${_state_root}/daemon.pid"
+  sudo rm -f "${_state_root}/triggered" "${_state_root}/daemon.pid" \
+    "${_state_root}/invocations.log" "${_state_root}/rsync-output.log"
 }
 
 __assert_daemon_was_killed() {
@@ -133,6 +135,10 @@ __wait_for_crash_trigger() {
     sleep 0.2
   done
   echo "rsync crash trigger was not armed for ${_expected_trigger}" >&2
+  sudo test -f "${_state_root}/invocations.log" &&
+    sudo tail -100 "${_state_root}/invocations.log" >&2 || true
+  sudo test -f "${_state_root}/rsync-output.log" &&
+    sudo cat "${_state_root}/rsync-output.log" >&2 || true
   return 1
 }
 

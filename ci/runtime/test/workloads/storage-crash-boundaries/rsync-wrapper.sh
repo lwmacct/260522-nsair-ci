@@ -7,8 +7,15 @@ _real_rsync="/usr/bin/rsync"
 
 __main() {
   local _mode _target_id _src _dest _daemon_pid
+  local _rsync_status=0
   local -a _args=("$@")
   local -a _options=()
+
+  {
+    printf 'rsync invocation:'
+    printf ' %q' "$@"
+    printf '\n'
+  } >>"${_state_root}/invocations.log"
 
   if ((${#_args[@]} < 2)) || [[ -e "${_state_root}/triggered" ]]; then
     exec "$_real_rsync" "$@"
@@ -39,7 +46,12 @@ __main() {
     --include=/partial.txt \
     --exclude='*' \
     "$_src" \
-    "$_dest"
+    "$_dest" >"${_state_root}/rsync-output.log" 2>&1 || _rsync_status=$?
+  if ((_rsync_status != 0)); then
+    printf 'rsync status: %s\n' "$_rsync_status" >>"${_state_root}/rsync-output.log"
+    cat "${_state_root}/rsync-output.log" >&2
+    exit "$_rsync_status"
+  fi
 
   _daemon_pid="$PPID"
   printf '%s\n' "$_daemon_pid" >"${_state_root}/daemon.pid"

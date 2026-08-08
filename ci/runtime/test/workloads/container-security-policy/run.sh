@@ -433,7 +433,7 @@ __assert_bpf_xattr_audit() {
       -v _profile="profile=${_profile}" \
       -v _operation="operation=${_operation}" \
       -v _decision="decision=${_decision}" \
-      -v _xattr_name="xattr_name=${_xattr_name}" \
+      -v _xattr_name="name=${_xattr_name}" \
       'index($0, "BPF LSM gate audit event") &&
 			 index($0, _operation) &&
 			 index($0, _decision) &&
@@ -445,9 +445,9 @@ __assert_bpf_xattr_audit() {
     sleep 0.5
   done
 
-  echo "missing BPF LSM xattr audit for profile=${_profile} operation=${_operation} decision=${_decision} xattr_name=${_xattr_name}" >&2
+  echo "missing BPF LSM xattr audit for profile=${_profile} operation=${_operation} decision=${_decision} name=${_xattr_name}" >&2
   tail -n +"$((_log_start + 1))" "$_daemon_log" 2>/dev/null |
-    grep -E 'BPF LSM gate audit event|operation=.*xattr|xattr_name=' |
+    grep -E 'BPF LSM gate audit event|operation=.*xattr|name=' |
     tail -160 >&2 || true
   exit 1
 }
@@ -477,11 +477,11 @@ __assert_no_bpf_host_audit() {
   sleep 0.5
   _log="$(tail -n +"$((_log_start + 1))" "$_daemon_log" 2>/dev/null || true)"
   if awk \
-    -v _marker="xattr_name=${_marker}" \
+    -v _marker="name=${_marker}" \
     'index($0, "BPF LSM gate audit event") && index($0, _marker) { found = 1 }
 		 END { exit !found }' <<<"$_log"; then
     echo "host xattr operation unexpectedly produced BPF LSM gate audit for ${_marker}" >&2
-    grep -F "xattr_name=${_marker}" <<<"$_log" >&2 || true
+    grep -F "name=${_marker}" <<<"$_log" >&2 || true
     exit 1
   fi
 }
