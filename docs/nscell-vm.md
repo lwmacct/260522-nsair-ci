@@ -22,10 +22,12 @@ The artifact contains `incus.tar.xz`, `disk.qcow2`, and `SHA256SUMS`.
 ## Workflows
 
 - `Build NSCell test VM image` runs on image changes, weekly, or manually. It
-  builds, boots, and validates the VM before publishing the stable tag.
-- `Test NSCell VM smoke` runs automatically after a successful image build and
-  can also be dispatched manually. It checks BPF LSM, nscell daemon readiness,
-  Docker runtime registration, and one `busybox` container.
+  builds the split VM artifact, checks the qcow2 file, and publishes the stable
+  tag without starting a guest.
+- `Test NSCell VM smoke` is a manual entry point (and is dispatched by the
+  nscell release workflow when a release needs VM coverage). It checks BPF LSM,
+  nscell daemon readiness, Docker runtime registration, and one `busybox`
+  container.
 - `Test NSCell VM workloads` is a manual entry point for the external workload
   suite. `workloads` accepts a space-separated list such as
   `procfs-cpu systemd-pid1`, or `all` for the complete suite.
