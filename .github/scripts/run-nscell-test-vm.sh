@@ -67,7 +67,7 @@ __wait_for_agent() {
       -f /etc/os-release \
       -a -x /opt/nscell-inputs/nscell \
       -a -x /opt/nscell-inputs/oras \
-      -a -f /opt/nscell-inputs/docker-images.tar \
+      -a -r /opt/nscell-inputs/docker-images.tar \
       -a -x /opt/nscell-inputs/nscell-ci/scripts/ci.sh >/dev/null 2>&1; then
       return 0
     fi
@@ -106,6 +106,7 @@ __prepare_test_assets() {
   __log "preparing offline smoke image"
   docker pull --platform linux/amd64 busybox:1.37.0
   docker save --output "${_docker_archive}" busybox:1.37.0
+  chmod 0644 "${_docker_archive}"
   install -m 0755 "${_oras_binary}" "${_asset_dir}/oras"
   mkdir -p "${_asset_dir}/nscell-ci"
   tar --exclude=.git -C "${_ci_repo}" -cf - . |
