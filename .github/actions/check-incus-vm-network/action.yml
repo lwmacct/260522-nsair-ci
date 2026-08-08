@@ -1,0 +1,25 @@
+name: Check Incus VM network
+description: Verify guest IPv4, DNS, and HTTPS connectivity through the Incus bridge
+
+inputs:
+  vm_name:
+    description: Name of the running Incus VM
+    required: true
+  network_interface:
+    description: Guest interface expected to carry the Incus bridge address
+    required: false
+    default: enp5s0
+  log_dir:
+    description: Host directory receiving network diagnostics on failure
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Verify guest network
+      shell: bash
+      env:
+        VM_NAME: ${{ inputs.vm_name }}
+        NETWORK_INTERFACE: ${{ inputs.network_interface }}
+        LOG_DIR: ${{ inputs.log_dir }}
+      run: bash "${{ github.action_path }}/run.sh"

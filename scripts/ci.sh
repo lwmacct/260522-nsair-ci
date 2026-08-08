@@ -5,7 +5,7 @@ set -euo pipefail
 
 _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _repo_root="$(cd "${_script_dir}/.." && pwd)"
-_runtime_test_dir="${_repo_root}/ci/runtime/test"
+_runtime_test_dir="${_repo_root}/tests"
 
 _nscell_image="${NSCELL_IMAGE:-ghcr.io/lwmacct/260522-nscell:latest}"
 _test_root="${NSCELL_CI_TEST_ROOT:-/tmp/nscell}"
@@ -99,7 +99,7 @@ __extract_nscell_binary_from_image() {
     _i=$((_i + 1))
     _layer="${_work_dir}/layers/${_i}.tar"
     __log "fetching layer ${_i}: ${_digest}"
-    oras blob fetch --output "$_layer" "${_repo}@${_digest}"
+    oras blob fetch --no-tty --output "$_layer" "${_repo}@${_digest}"
     tar -xf "$_layer" -C "${_work_dir}/rootfs"
   done < <(jq -r '.layers[].digest' "$_manifest")
 

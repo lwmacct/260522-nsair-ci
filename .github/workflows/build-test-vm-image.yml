@@ -317,7 +317,7 @@ jobs:
             _stable_tag="artifact-images-${IMAGE_NAME}"
             (
               cd "${RUNNER_TEMP}/${OUTPUT_DIR_NAME}"
-              oras push \
+              oras push --no-tty \
                 --artifact-type "${ORAS_ARTIFACT_TYPE_VM}" \
                 --annotation "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
                 --annotation "org.opencontainers.image.revision=${_full_sha}" \

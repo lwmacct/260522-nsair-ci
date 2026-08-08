@@ -1,0 +1,41 @@
+name: Start Incus VM
+description: Import a verified Incus image, attach the CI 9p share, and start one VM
+
+inputs:
+  image_dir:
+    description: Directory containing incus.tar.xz, disk.qcow2, and SHA256SUMS
+    required: true
+  share_dir:
+    description: Host directory exposed to the guest at /opt/nscell-ci
+    required: true
+  test_target:
+    description: Concrete workload name used to derive the VM name
+    required: true
+  vm_cpu:
+    description: Number of virtual CPUs
+    required: true
+  vm_memory:
+    description: Incus memory limit
+    required: true
+
+outputs:
+  vm_name:
+    description: Name of the started Incus VM
+    value: ${{ steps.start.outputs.vm_name }}
+  image_alias:
+    description: Temporary Incus image alias
+    value: ${{ steps.start.outputs.image_alias }}
+
+runs:
+  using: composite
+  steps:
+    - name: Import and start VM
+      id: start
+      shell: bash
+      env:
+        IMAGE_DIR: ${{ inputs.image_dir }}
+        SHARE_DIR: ${{ inputs.share_dir }}
+        TEST_TARGET: ${{ inputs.test_target }}
+        VM_CPU: ${{ inputs.vm_cpu }}
+        VM_MEMORY: ${{ inputs.vm_memory }}
+      run: bash "${{ github.action_path }}/run.sh"

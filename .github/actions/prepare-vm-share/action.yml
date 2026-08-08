@@ -1,0 +1,26 @@
+name: Prepare VM source share
+description: Copy the CI checkout into the read-only 9p share used by one test VM
+
+inputs:
+  ci_repo:
+    description: Path to the checked-out CI repository
+    required: true
+  test_target:
+    description: Concrete workload name used to derive the isolated share path
+    required: true
+
+outputs:
+  share_dir:
+    description: Host directory containing the read-only CI snapshot
+    value: ${{ steps.prepare.outputs.share_dir }}
+
+runs:
+  using: composite
+  steps:
+    - name: Copy CI checkout to share
+      id: prepare
+      shell: bash
+      env:
+        CI_REPO: ${{ inputs.ci_repo }}
+        TEST_TARGET: ${{ inputs.test_target }}
+      run: bash "${{ github.action_path }}/run.sh"

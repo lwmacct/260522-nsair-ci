@@ -85,7 +85,7 @@ jobs:
           __workload_names() {
             local _workload_path
 
-            for _workload_path in ci/runtime/test/workloads/*; do
+            for _workload_path in tests/workloads/*; do
               [[ -d "${_workload_path}" && -f "${_workload_path}/run.sh" ]] || continue
               basename "${_workload_path}"
             done | sort
@@ -124,7 +124,7 @@ jobs:
               if [[ "${_target}" != smoke &&
                 ! "${_target}" =~ ^[a-z0-9][a-z0-9-]*$ ]] ||
                 [[ "${_target}" != smoke &&
-                  ! -f "ci/runtime/test/workloads/${_target}/run.sh" ]]; then
+                  ! -f "tests/workloads/${_target}/run.sh" ]]; then
                 echo "unknown workload target: ${_target}" >&2
                 return 2
               fi
@@ -175,20 +175,38 @@ jobs:
           registry_username: ${{ github.actor }}
           registry_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run isolated workload VM
-        env:
-          NSCELL_VM_CI_REPO: ${{ github.workspace }}
-          NSCELL_VM_IMAGE_DIR: ${{ steps.image.outputs.image_dir }}
-          NSCELL_VM_IMAGE_REF: ${{ needs.prepare.outputs.image_ref }}
-          NSCELL_VM_CPU: ${{ steps.incus.outputs.vm_cpu_count }}
-          NSCELL_VM_MEMORY: ${{ steps.incus.outputs.vm_memory_limit }}
-          NSCELL_VM_LOG_DIR: ${{ runner.temp }}/test-vm-${{ matrix.target }}-logs
-          NSCELL_REGISTRY_USERNAME: ${{ github.actor }}
-          NSCELL_REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          bash .github/scripts/run-test-vm.sh \
-            "${{ matrix.target }}" \
-            "${{ inputs.nscell_image }}"
+      - name: Prepare VM source share
+        id: share
+        uses: ./.github/actions/prepare-vm-share
+        with:
+          ci_repo: ${{ github.workspace }}
+          test_target: ${{ matrix.target }}
+
+      - name: Start isolated VM
+        id: vm
+        uses: ./.github/actions/start-incus-vm
+        with:
+          image_dir: ${{ steps.image.outputs.image_dir }}
+          share_dir: ${{ steps.share.outputs.share_dir }}
+          test_target: ${{ matrix.target }}
+          vm_cpu: ${{ steps.incus.outputs.vm_cpu_count }}
+          vm_memory: ${{ steps.incus.outputs.vm_memory_limit }}
+
+      - name: Run workload in isolated VM
+        uses: ./.github/actions/run-vm-workload
+        with:
+          vm_name: ${{ steps.vm.outputs.vm_name }}
+          test_target: ${{ matrix.target }}
+          nscell_image: ${{ inputs.nscell_image }}
+          registry_username: ${{ github.actor }}
+          registry_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cleanup isolated VM
+        if: always()
+        uses: ./.github/actions/cleanup-incus-vm
+        with:
+          test_target: ${{ matrix.target }}
+          log_dir: ${{ runner.temp }}/test-vm-${{ matrix.target }}-logs
 
       - name: Upload VM diagnostics
         if: always()

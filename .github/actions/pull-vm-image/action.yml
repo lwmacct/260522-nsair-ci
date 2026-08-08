@@ -70,7 +70,7 @@ runs:
           mkdir -p "${_image_dir}"
           _image_digest="$(oras resolve "${IMAGE_REF}")"
           [[ "${_image_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
-          oras pull --output "${_image_dir}" "${IMAGE_REF}"
+          oras pull --no-tty --output "${_image_dir}" "${IMAGE_REF}"
           (
             cd "${_image_dir}"
             sha256sum --check SHA256SUMS

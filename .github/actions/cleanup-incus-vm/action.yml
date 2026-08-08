@@ -1,0 +1,20 @@
+name: Cleanup Incus VM
+description: Collect guest diagnostics and remove the disposable VM, image, and 9p share
+
+inputs:
+  test_target:
+    description: Concrete workload name used to derive VM and share paths
+    required: true
+  log_dir:
+    description: Host directory receiving VM diagnostics
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Collect diagnostics and delete VM
+      shell: bash
+      env:
+        TEST_TARGET: ${{ inputs.test_target }}
+        LOG_DIR: ${{ inputs.log_dir }}
+      run: bash "${{ github.action_path }}/run.sh"

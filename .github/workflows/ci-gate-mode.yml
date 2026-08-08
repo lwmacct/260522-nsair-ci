@@ -67,7 +67,7 @@ jobs:
           import shlex
           import sys
 
-          root = pathlib.Path("ci/runtime/test/workloads")
+          root = pathlib.Path("tests/workloads")
           available = sorted(path.name for path in root.iterdir() if (path / "run.sh").is_file())
           selected = shlex.split(os.environ.get("SELECTED_WORKLOADS", ""))
           workloads = selected or available

@@ -29,12 +29,12 @@ The artifact contains `incus.tar.xz`, `disk.qcow2`, and `SHA256SUMS`.
 - `Build test VM images` runs on profile changes or manually. It builds each
   selected profile, checks the qcow2 file, and publishes only a
   commit-addressed candidate without starting a guest.
-- `Test NSCell VM smoke` is a manual entry point (and is dispatched by the
-  nscell release workflow when a release needs VM coverage). It checks BPF LSM,
-  nscell daemon readiness, Docker runtime registration, and one `busybox`
-  container.
-- `Test NSCell VM workloads` is a manual entry point for the external workload
-  suite. `workloads` accepts a space-separated list such as
+- `Test workloads in VM` is the manual and reusable entry point for VM
+  coverage. Each selected target gets its own runner and VM, so workloads run
+  concurrently rather than sharing a guest. The special `smoke` target checks
+  BPF LSM, nscell daemon readiness, Docker runtime registration, and one
+  `busybox` container.
+- The same workflow accepts a space-separated list such as
   `procfs-cpu systemd-pid1`, or `all` for the complete suite.
 
 Both test workflows accept `nscell_image`. The nscell release workflow passes
