@@ -54,8 +54,6 @@ __collect_guest_logs() {
   ' >"${_log_dir}/guest-diagnostics.log" 2>&1 || true
   sudo incus file pull "${_vm_name}/var/log/nscell-daemon.log" \
     "${_log_dir}/nscell-daemon.log" 2>/dev/null || true
-  sudo incus file pull -r "${_vm_name}/data/nscell" \
-    "${_log_dir}/data-nscell" 2>/dev/null || true
 }
 
 __cleanup() {

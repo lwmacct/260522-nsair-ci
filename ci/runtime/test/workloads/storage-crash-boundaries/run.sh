@@ -109,6 +109,33 @@ __assert_daemon_was_killed() {
   __wait_for_pid_exit "$_expected_pid" daemon
 }
 
+__wait_for_crash_trigger() {
+  local _expected_pid="$1"
+  local _expected_trigger="$2"
+  local _deadline=$((SECONDS + 20))
+  local _actual_pid _actual_trigger
+
+  while ((SECONDS <= _deadline)); do
+    if sudo test -s "${_state_root}/triggered" &&
+      sudo test -s "${_state_root}/daemon.pid"; then
+      _actual_trigger="$(sudo cat "${_state_root}/triggered")"
+      _actual_pid="$(sudo cat "${_state_root}/daemon.pid")"
+      if [[ "$_actual_trigger" != "$_expected_trigger" ]]; then
+        echo "unexpected rsync crash trigger: got ${_actual_trigger}, want ${_expected_trigger}" >&2
+        return 1
+      fi
+      if [[ "$_actual_pid" != "$_expected_pid" ]]; then
+        echo "rsync wrapper observed daemon ${_actual_pid}, want ${_expected_pid}" >&2
+        return 1
+      fi
+      return 0
+    fi
+    sleep 0.2
+  done
+  echo "rsync crash trigger was not armed for ${_expected_trigger}" >&2
+  return 1
+}
+
 __assert_json_map_lacks_id() {
   local _path="$1"
   local _map="$2"
@@ -166,7 +193,7 @@ __create_container() {
 }
 
 __assert_sync_in_recovery() {
-  local _daemon_pid _backing
+  local _daemon_pid _create_pid _create_status=0 _backing
 
   __prepare_oci_bundle \
     "$_oci_base_image" \
@@ -182,14 +209,23 @@ __assert_sync_in_recovery() {
   __log "killing the daemon during a partial managed-volume SyncIn"
   __arm_crash sync-in "$_storage_crash_sync_in_id"
   _daemon_pid="$(systemctl show --property MainPID --value nscell-daemon.service)"
-  if timeout 45s sudo nscell --root "$_oci_runtime_root" create \
+  timeout 45s sudo nscell --root "$_oci_runtime_root" create \
     --bundle "$_sync_in_bundle" \
     --pid-file "${_sync_in_bundle}/init.pid" \
-    "$_storage_crash_sync_in_id"; then
+    "$_storage_crash_sync_in_id" &
+  _create_pid=$!
+  __wait_for_crash_trigger "$_daemon_pid" "sync-in:${_storage_crash_sync_in_id}"
+  sudo kill -KILL "$_daemon_pid"
+  __assert_daemon_was_killed "$_daemon_pid" "sync-in:${_storage_crash_sync_in_id}"
+  wait "$_create_pid" || _create_status=$?
+  if ((_create_status == 0)); then
     echo "OCI create unexpectedly succeeded after SyncIn crash" >&2
     return 1
   fi
-  __assert_daemon_was_killed "$_daemon_pid" "sync-in:${_storage_crash_sync_in_id}"
+  if ((_create_status == 124)); then
+    echo "OCI create timed out after SyncIn crash" >&2
+    return 1
+  fi
 
   _backing="/var/lib/nscell/work/docker/${_storage_crash_sync_in_id}"
   if [[ "$(sudo cat "${_backing}/partial.txt")" != "sync-in-partial-original" ]]; then
@@ -212,7 +248,7 @@ __assert_sync_in_recovery() {
 }
 
 __assert_sync_out_recovery() {
-  local _daemon_pid _container_pid _backing _delete_status=0
+  local _daemon_pid _container_pid _delete_pid _backing _delete_status=0
 
   __prepare_oci_bundle \
     "$_oci_base_image" \
@@ -235,13 +271,16 @@ __assert_sync_out_recovery() {
   __log "killing the daemon during a partial managed-volume SyncOut"
   __arm_crash sync-out "$_storage_crash_sync_out_id"
   _daemon_pid="$(systemctl show --property MainPID --value nscell-daemon.service)"
-  timeout 45s sudo nscell --root "$_oci_runtime_root" delete --force "$_storage_crash_sync_out_id" ||
-    _delete_status=$?
+  timeout 45s sudo nscell --root "$_oci_runtime_root" delete --force "$_storage_crash_sync_out_id" &
+  _delete_pid=$!
+  __wait_for_crash_trigger "$_daemon_pid" "sync-out:${_storage_crash_sync_out_id}"
+  sudo kill -KILL "$_daemon_pid"
+  __assert_daemon_was_killed "$_daemon_pid" "sync-out:${_storage_crash_sync_out_id}"
+  wait "$_delete_pid" || _delete_status=$?
   if ((_delete_status == 124)); then
     echo "OCI delete timed out after SyncOut crash" >&2
     return 1
   fi
-  __assert_daemon_was_killed "$_daemon_pid" "sync-out:${_storage_crash_sync_out_id}"
 
   _backing="/var/lib/nscell/work/docker/${_storage_crash_sync_out_id}"
   if [[ "$(sudo cat "${_sync_out_bundle}/rootfs/var/lib/docker/partial.txt")" != "sync-out-partial-new" ]]; then

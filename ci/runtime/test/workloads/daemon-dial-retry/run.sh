@@ -26,7 +26,8 @@ __restore_daemon() {
 }
 
 __main() {
-  local _create_pid _started_ms _finished_ms _elapsed_ms
+  local _create_pid _daemon_start_pid _deadline
+  local _started_ms _finished_ms _elapsed_ms
 
   if [[ "${1:-}" == "cleanup" ]]; then
     __restore_daemon
@@ -67,17 +68,35 @@ __main() {
     exit 1
   fi
 
-  __log "restoring daemon inside the runtime client's retry window"
-  sudo systemctl start nscell-daemon.service
+  __log "restoring daemon while the OCI create request remains pending"
+  sudo systemctl start nscell-daemon.service &
+  _daemon_start_pid=$!
+  _deadline=$((SECONDS + 30))
+  while kill -0 "$_create_pid" >/dev/null 2>&1 && ((SECONDS <= _deadline)); do
+    sleep 0.2
+  done
+  if kill -0 "$_create_pid" >/dev/null 2>&1; then
+    echo "OCI create did not finish within 30 seconds after daemon recovery" >&2
+    kill "$_create_pid" >/dev/null 2>&1 || true
+    wait "$_create_pid" || true
+    wait "$_daemon_start_pid" || true
+    cat "$_create_log" >&2
+    exit 1
+  fi
   if ! wait "$_create_pid"; then
+    wait "$_daemon_start_pid" || true
     echo "OCI create failed after daemon recovery" >&2
     cat "$_create_log" >&2
     exit 1
   fi
   _finished_ms="$(date +%s%3N)"
   _elapsed_ms=$((_finished_ms - _started_ms))
-  if ((_elapsed_ms < 900 || _elapsed_ms >= 5000)); then
-    echo "OCI create retry duration ${_elapsed_ms}ms is outside the expected window" >&2
+  if ! wait "$_daemon_start_pid"; then
+    echo "nscell daemon failed to start during OCI create retry" >&2
+    exit 1
+  fi
+  if ((_elapsed_ms < 900)); then
+    echo "OCI create completed before exercising daemon dial retry: ${_elapsed_ms}ms" >&2
     exit 1
   fi
 

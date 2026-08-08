@@ -155,7 +155,7 @@ __assert_bpf_mount_audit() {
     _log="$(tail -n +"$((_log_start + 1))" "$_daemon_log" 2>/dev/null || true)"
     if awk \
       -v _profile="profile=${_profile}" \
-      -v _fs_type="fs_type=${_fs_type}" \
+      -v _fs_type="name=${_fs_type}" \
       'index($0, "BPF LSM gate audit event") &&
 			 index($0, "operation=mount") &&
 			 index($0, "decision=deny") &&

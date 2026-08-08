@@ -45,7 +45,10 @@ __main() {
   printf '%s\n' "$_daemon_pid" >"${_state_root}/daemon.pid"
   printf '%s:%s\n' "$_mode" "$_target_id" >"${_state_root}/triggered"
   sync -f "$_state_root"
-  kill -KILL "$_daemon_pid"
+  while [[ -d "/proc/${_daemon_pid}" ]]; do
+    sleep 0.1
+  done
+  exit 137
 }
 
 __main "$@"
