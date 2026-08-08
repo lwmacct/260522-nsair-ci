@@ -16,6 +16,9 @@ _resource_id="${_resource_id:0:24}"
 _vm_name="${NSCELL_VM_NAME:-nscell-test-vm-${_resource_id}}"
 _image_alias="${_vm_name}-image"
 _image_dir="${RUNNER_TEMP:-/tmp}/nscell-test-vm-${_resource_id}"
+_asset_dir="${RUNNER_TEMP:-/tmp}/nscell-test-vm-assets-${_resource_id}"
+_nscell_binary="${_asset_dir}/nscell"
+_docker_archive="${_asset_dir}/docker-images.tar"
 _log_dir="${NSCELL_VM_LOG_DIR:-${RUNNER_TEMP:-/tmp}/nscell-test-vm-logs-${_resource_id}}"
 
 __log() {
@@ -24,6 +27,7 @@ __log() {
 
 __collect_guest_logs() {
   mkdir -p "${_log_dir}"
+  # shellcheck disable=SC2024 # The runner user owns the diagnostics destination.
   sudo incus exec "${_vm_name}" -- bash -euo pipefail -c '
     {
       uname -a
@@ -83,6 +87,22 @@ __prepare_image() {
     --alias "${_image_alias}"
 }
 
+__prepare_test_assets() {
+  rm -rf "${_asset_dir}"
+  mkdir -p "${_asset_dir}"
+
+  __log "extracting nscell from ${_nscell_image}"
+  NSCELL_IMAGE="${_nscell_image}" \
+    NSCELL_IMAGE_PLATFORM=linux/amd64 \
+    NSCELL_CI_TEST_ROOT="${_asset_dir}/extract" \
+    bash "${_ci_repo}/scripts/ci.sh" extract-nscell-binary "${_nscell_binary}"
+  "${_nscell_binary}" version
+
+  __log "preparing offline smoke image"
+  docker pull --platform linux/amd64 busybox:1.37.0
+  docker save --output "${_docker_archive}" busybox:1.37.0
+}
+
 __launch_vm() {
   sudo incus init "${_image_alias}" "${_vm_name}" \
     --vm \
@@ -97,6 +117,8 @@ __launch_vm() {
 }
 
 __copy_inputs() {
+  sudo incus file push "${_nscell_binary}" "${_vm_name}/opt/nscell.test"
+  sudo incus file push "${_docker_archive}" "${_vm_name}/opt/nscell-docker-images.tar"
   sudo incus file push "${_oras_binary}" "${_vm_name}/opt/oras.test"
   sudo incus exec "${_vm_name}" -- mkdir -p /opt/nscell-ci
   tar --exclude=.git -C "${_ci_repo}" -cf - . |
@@ -105,27 +127,28 @@ __copy_inputs() {
 
 __configure_guest() {
   __log "configuring nscell in ${_vm_name}"
-  sudo incus exec "${_vm_name}" -- env NSCELL_TEST_MODE="${_test_mode}" NSCELL_TEST_WORKLOADS="${_workloads}" NSCELL_TEST_NSCELL_IMAGE="${_nscell_image}" bash -s <<'EOF'
+  sudo incus exec "${_vm_name}" -- env NSCELL_TEST_MODE="${_test_mode}" NSCELL_TEST_WORKLOADS="${_workloads}" bash -s <<'EOF'
 set -euo pipefail
 
 _test_mode="${NSCELL_TEST_MODE}"
 _workloads="${NSCELL_TEST_WORKLOADS}"
-_nscell_image="${NSCELL_TEST_NSCELL_IMAGE}"
 
 install -m 0755 /opt/oras.test /usr/local/bin/oras
 rm -f /opt/oras.test
+docker load --input /opt/nscell-docker-images.tar
+rm -f /opt/nscell-docker-images.tar
 mountpoint -q /sys/fs/bpf || mount -t bpf bpf /sys/fs/bpf
 grep -qw bpf /sys/kernel/security/lsm
 
 cd /opt/nscell-ci
-export NSCELL_IMAGE="${_nscell_image}"
-bash scripts/ci.sh install-dependencies
+export NSCELL_BINARY=/opt/nscell.test
 bash scripts/ci.sh setup-runtime-host
+rm -f /opt/nscell.test
 bash scripts/ci.sh verify-gate
 
 case "${_test_mode}" in
 smoke)
-  docker run --rm --runtime nscell --pull=always busybox:1.37.0 sh -c 'test "$(uname -m)" = x86_64; test "$(cat /etc/hostname)" != ""; echo nscell-vm-smoke-ok'
+  docker run --rm --runtime nscell --pull=never busybox:1.37.0 sh -c 'test "$(uname -m)" = x86_64; test "$(cat /etc/hostname)" != ""; echo nscell-vm-smoke-ok'
   ;;
 workloads)
   bash scripts/ci.sh show-host-capabilities
@@ -157,6 +180,7 @@ __main() {
   esac
 
   trap __cleanup EXIT HUP INT TERM
+  __prepare_test_assets
   __prepare_image
   __launch_vm
   __copy_inputs
