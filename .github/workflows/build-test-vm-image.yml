@@ -5,10 +5,8 @@ on:
     branches:
       - main
     paths:
-      - images/nscell-test-vm.yaml
+      - images/test-vm.yaml
       - .github/workflows/build-test-vm-image.yml
-  schedule:
-    - cron: "17 3 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -129,7 +127,7 @@ jobs:
       - name: Validate image definition
         run: |
           set -euo pipefail
-          sudo distrobuilder validate images/nscell-test-vm.yaml
+          sudo distrobuilder validate images/test-vm.yaml
 
       - name: Build Incus VM image
         run: |
@@ -138,7 +136,7 @@ jobs:
           echo "OUTPUT_DIR=${RUNNER_TEMP}/nscell-test-vm-image" >> "${GITHUB_ENV}"
           sudo mkdir -p "${RUNNER_TEMP}/nscell-test-vm-image"
           sudo distrobuilder build-incus \
-            images/nscell-test-vm.yaml \
+            images/test-vm.yaml \
             "${RUNNER_TEMP}/nscell-test-vm-image" \
             --type=split \
             --compression=xz \

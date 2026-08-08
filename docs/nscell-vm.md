@@ -4,7 +4,7 @@ This repository owns a dedicated Ubuntu 24.04 AMD64 Incus VM image for NSCell
 runtime validation. The image is built with `distrobuilder`, while the runner
 installs Incus from the signed Zabbly source at `pkgs.zabbly.com`.
 
-The image definition is `images/nscell-test-vm.yaml`. It contains the Incus VM
+The image definition is `images/test-vm.yaml`. It contains the Incus VM
 agent, the Docker runtime stack, FUSE and idmap utilities, diagnostics, and a
 guest GRUB command line that enables the BPF LSM. It does not contain an
 NSCell binary; each test workflow accepts an nscell OCI image, extracts its
@@ -22,7 +22,7 @@ The artifact contains `incus.tar.xz`, `disk.qcow2`, and `SHA256SUMS`.
 
 ## Workflows
 
-- `Build NSCell test VM image` runs on image changes, weekly, or manually. It
+- `Build NSCell test VM image` runs on image changes or manually. It
   builds the split VM artifact, checks the qcow2 file, and publishes the stable
   tag without starting a guest.
 - `Test NSCell VM smoke` is a manual entry point (and is dispatched by the
