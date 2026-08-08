@@ -68,7 +68,7 @@ __wait_for_agent() {
       -a -x /opt/nscell-inputs/nscell \
       -a -x /opt/nscell-inputs/oras \
       -a -f /opt/nscell-inputs/docker-images.tar \
-      -a -x /opt/nscell-ci/scripts/ci.sh >/dev/null 2>&1; then
+      -a -x /opt/nscell-inputs/nscell-ci/scripts/ci.sh >/dev/null 2>&1; then
       return 0
     fi
     sleep 5
@@ -107,6 +107,9 @@ __prepare_test_assets() {
   docker pull --platform linux/amd64 busybox:1.37.0
   docker save --output "${_docker_archive}" busybox:1.37.0
   install -m 0755 "${_oras_binary}" "${_asset_dir}/oras"
+  mkdir -p "${_asset_dir}/nscell-ci"
+  tar --exclude=.git -C "${_ci_repo}" -cf - . |
+    tar -xf - -C "${_asset_dir}/nscell-ci"
 }
 
 __launch_vm() {
@@ -120,13 +123,7 @@ __launch_vm() {
     source="${_asset_dir}" \
     path=/opt/nscell-inputs \
     readonly=true \
-    io.bus=auto
-  sudo incus --quiet config device add \
-    "${_vm_name}" nscell-ci disk \
-    source="${_ci_repo}" \
-    path=/opt/nscell-ci \
-    readonly=true \
-    io.bus=auto
+    io.bus=9p
   sudo incus --quiet start "${_vm_name}"
   if ! __wait_for_agent; then
     __collect_guest_logs
@@ -147,7 +144,7 @@ docker load --input /opt/nscell-inputs/docker-images.tar
 mountpoint -q /sys/fs/bpf || mount -t bpf bpf /sys/fs/bpf
 grep -qw bpf /sys/kernel/security/lsm
 
-cd /opt/nscell-ci
+cd /opt/nscell-inputs/nscell-ci
 export NSCELL_BINARY=/opt/nscell-inputs/nscell
 bash scripts/ci.sh setup-runtime-host
 bash scripts/ci.sh verify-gate
