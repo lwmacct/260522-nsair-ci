@@ -16,6 +16,7 @@ _resource_id="$(printf '%s' "${_run_id}" | tr -c '[:alnum:]_.-' '-')"
 _resource_id="${_resource_id:0:32}"
 _vm_name="${NSCELL_VM_NAME:-test-vm-${_resource_id}}"
 _image_alias="${_vm_name}-image"
+_share_dir="${RUNNER_TEMP:-/tmp}/test-vm-share-${_resource_id}"
 _log_dir="${NSCELL_VM_LOG_DIR:-${RUNNER_TEMP:-/tmp}/test-vm-logs-${_resource_id}}"
 
 __log() {
@@ -34,6 +35,9 @@ __collect_guest_logs() {
       ip -4 address show || true
       ip -4 route show || true
       cat /etc/resolv.conf || true
+      findmnt -T /opt/nscell-ci || true
+      ls -ld /opt/nscell-ci || true
+      ls -l /opt/nscell-ci/scripts/ci.sh || true
       docker version || true
       oras version || true
       systemctl --no-pager --full status docker.service nscell-daemon.service || true
@@ -42,6 +46,8 @@ __collect_guest_logs() {
       docker info || true
       docker ps -a || true
       docker images || true
+      systemctl --no-pager --full status incus-agent.service || true
+      journalctl --no-pager -u incus-agent.service || true
       journalctl --no-pager -u docker.service -u nscell-daemon.service || true
     } 2>&1
     test -f /var/log/nscell-daemon.log && cat /var/log/nscell-daemon.log || true
@@ -67,19 +73,30 @@ __cleanup() {
 }
 
 __wait_for_agent() {
-  local _attempt
+  local _agent_ready=false _attempt
 
-  for _attempt in $(seq 1 120); do
+  for _attempt in $(seq 1 60); do
     if sudo incus exec "${_vm_name}" -- test \
       -f /etc/test-vm-profile \
       -x /usr/local/bin/oras \
-      -x /usr/bin/docker \
-      -r /opt/nscell-ci/scripts/ci.sh >/dev/null 2>&1; then
-      return 0
+      -x /usr/bin/docker >/dev/null 2>&1; then
+      _agent_ready=true
+      if sudo incus exec "${_vm_name}" -- test \
+        -r /opt/nscell-ci/scripts/ci.sh >/dev/null 2>&1; then
+        return 0
+      fi
     fi
-    sleep 5
+    if [[ "${_agent_ready}" == true ]]; then
+      sleep 2
+    else
+      sleep 5
+    fi
   done
-  echo "Incus agent did not expose the standard VM contract within 10 minutes" >&2
+  if [[ "${_agent_ready}" == true ]]; then
+    echo "Incus agent is ready but the CI 9p share was not mounted" >&2
+  else
+    echo "Incus agent did not expose the standard VM contract within 5 minutes" >&2
+  fi
   return 1
 }
 
@@ -93,6 +110,14 @@ __import_image() {
     --alias "${_image_alias}"
 }
 
+__prepare_share() {
+  mkdir -p "${_share_dir}"
+  tar --exclude=.git -C "${_ci_repo}" -cf - . |
+    tar -xf - -C "${_share_dir}"
+  test -x "${_share_dir}/scripts/ci.sh"
+  test -d "${_share_dir}/ci/runtime/test"
+}
+
 __launch_vm() {
   sudo incus --quiet init "${_image_alias}" "${_vm_name}" \
     --vm \
@@ -101,7 +126,7 @@ __launch_vm() {
     -c limits.memory="${_vm_memory}"
   sudo incus --quiet config device add \
     "${_vm_name}" ci-source disk \
-    source="${_ci_repo}" \
+    source="${_share_dir}" \
     path=/opt/nscell-ci \
     readonly=true \
     io.bus=9p
@@ -182,6 +207,7 @@ __main() {
   test -d "${_ci_repo}"
   test -d "${_image_dir}"
   trap __cleanup EXIT HUP INT TERM
+  __prepare_share
   __import_image
   __launch_vm
   __check_network
