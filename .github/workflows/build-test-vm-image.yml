@@ -308,12 +308,13 @@ jobs:
           ORAS_CHECKSUM_TYPE: text/plain
         run: |
           __main() {
-            local _digest _full_sha _revision_tag _short_sha
+            local _digest _full_sha _revision_tag _short_sha _stable_tag
 
             set -euo pipefail
             _full_sha="$(git rev-parse HEAD)"
             _short_sha="${_full_sha:0:12}"
             _revision_tag="artifact-images-${IMAGE_NAME}-sha-${_short_sha}"
+            _stable_tag="artifact-images-${IMAGE_NAME}"
             (
               cd "${RUNNER_TEMP}/${OUTPUT_DIR_NAME}"
               oras push \
@@ -328,6 +329,7 @@ jobs:
                 "disk.qcow2:${ORAS_DISK_TYPE}" \
                 "SHA256SUMS:${ORAS_CHECKSUM_TYPE}"
             )
+            oras tag "${OCI_REPOSITORY}:${_revision_tag}" "${_stable_tag}"
             _digest="$(oras resolve "${OCI_REPOSITORY}:${_revision_tag}")"
             [[ "${_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
             {
@@ -335,8 +337,8 @@ jobs:
               echo
               echo "- Profile: \`${IMAGE_NAME}\`"
               echo "- Candidate: \`${OCI_REPOSITORY}:${_revision_tag}\`"
+              echo "- Stable: \`${OCI_REPOSITORY}:${_stable_tag}\`"
               echo "- Immutable: \`${OCI_REPOSITORY}@${_digest}\`"
-              echo "- Stable tag updated: no"
             } >> "${GITHUB_STEP_SUMMARY}"
           }
 
