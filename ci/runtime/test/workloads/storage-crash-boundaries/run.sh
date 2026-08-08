@@ -64,13 +64,16 @@ __cleanup() {
   __remove_oci_bundle "$_sync_out_bundle"
   sudo rm -f "$_drop_in"
   sudo systemctl daemon-reload
+  sudo umount /usr/bin/rsync >/dev/null 2>&1 || true
   sudo systemctl restart nscell-daemon.service >/dev/null 2>&1 || true
   sudo rm -rf "$_state_root"
 }
 
 __install_rsync_wrapper() {
   sudo install -d -m 0700 "$_wrapper_dir" "$_drop_in_dir"
+  sudo install -m 0755 /usr/bin/rsync "${_state_root}/rsync.real"
   sudo install -m 0755 "${_workload_path}/rsync-wrapper.sh" "${_wrapper_dir}/rsync"
+  sudo mount --bind "${_wrapper_dir}/rsync" /usr/bin/rsync
   printf '%s\n' \
     '[Service]' \
     "Environment=PATH=${_wrapper_dir}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" |
@@ -322,6 +325,7 @@ __main() {
   __require_cmd docker
   __require_cmd jq
   __require_cmd rsync
+  __require_cmd mount
   __require_cmd systemctl
   __require_cmd timeout
   __assert_nscell_ready

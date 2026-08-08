@@ -3,7 +3,7 @@
 set -euo pipefail
 
 _state_root="/run/nscell-ci-storage-crash-boundaries"
-_real_rsync="/usr/bin/rsync"
+_real_rsync="${_state_root}/rsync.real"
 
 __main() {
   local _mode _target_id _src _dest _daemon_pid
