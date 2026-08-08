@@ -73,17 +73,21 @@ __cleanup() {
 }
 
 __wait_for_agent() {
-  local _agent_ready=false _attempt
+  local _agent_ready=false _contract_ready=false _attempt
 
   for _attempt in $(seq 1 60); do
-    if sudo incus exec "${_vm_name}" -- test \
-      -f /etc/test-vm-profile \
-      -x /usr/local/bin/oras \
-      -x /usr/bin/docker >/dev/null 2>&1; then
+    if sudo incus exec "${_vm_name}" -- true >/dev/null 2>&1; then
       _agent_ready=true
-      if sudo incus exec "${_vm_name}" -- test \
-        -r /opt/nscell-ci/scripts/ci.sh >/dev/null 2>&1; then
-        return 0
+      if sudo incus exec "${_vm_name}" -- sh -c '
+        test -f /etc/test-vm-profile &&
+          test -x /usr/local/bin/oras &&
+          test -x /usr/bin/docker
+      ' >/dev/null 2>&1; then
+        _contract_ready=true
+        if sudo incus exec "${_vm_name}" -- test \
+          -r /opt/nscell-ci/scripts/ci.sh >/dev/null 2>&1; then
+          return 0
+        fi
       fi
     fi
     if [[ "${_agent_ready}" == true ]]; then
@@ -92,10 +96,12 @@ __wait_for_agent() {
       sleep 5
     fi
   done
-  if [[ "${_agent_ready}" == true ]]; then
+  if [[ "${_contract_ready}" == true ]]; then
     echo "Incus agent is ready but the CI 9p share was not mounted" >&2
+  elif [[ "${_agent_ready}" == true ]]; then
+    echo "Incus agent is ready but the standard VM contract is incomplete" >&2
   else
-    echo "Incus agent did not expose the standard VM contract within 5 minutes" >&2
+    echo "Incus agent did not become ready within 5 minutes" >&2
   fi
   return 1
 }
