@@ -63,7 +63,12 @@ __cleanup() {
 __wait_for_agent() {
   local _attempt
   for _attempt in $(seq 1 120); do
-    if sudo incus exec "${_vm_name}" -- test -f /etc/os-release >/dev/null 2>&1; then
+    if sudo incus exec "${_vm_name}" -- test \
+      -f /etc/os-release \
+      -a -x /opt/nscell-inputs/nscell \
+      -a -x /opt/nscell-inputs/oras \
+      -a -f /opt/nscell-inputs/docker-images.tar \
+      -a -x /opt/nscell-ci/scripts/ci.sh >/dev/null 2>&1; then
       return 0
     fi
     sleep 5
@@ -81,7 +86,7 @@ __prepare_image() {
     sha256sum --check SHA256SUMS
   )
   qemu-img check "${_image_dir}/disk.qcow2"
-  sudo incus image import \
+  sudo incus --quiet image import \
     "${_image_dir}/incus.tar.xz" \
     "${_image_dir}/disk.qcow2" \
     --alias "${_image_alias}"
@@ -101,28 +106,32 @@ __prepare_test_assets() {
   __log "preparing offline smoke image"
   docker pull --platform linux/amd64 busybox:1.37.0
   docker save --output "${_docker_archive}" busybox:1.37.0
+  install -m 0755 "${_oras_binary}" "${_asset_dir}/oras"
 }
 
 __launch_vm() {
-  sudo incus init "${_image_alias}" "${_vm_name}" \
+  sudo incus --quiet init "${_image_alias}" "${_vm_name}" \
     --vm \
     -c security.secureboot=false \
     -c limits.cpu=4 \
     -c limits.memory=8GiB
-  sudo incus start "${_vm_name}"
+  sudo incus --quiet config device add \
+    "${_vm_name}" nscell-inputs disk \
+    source="${_asset_dir}" \
+    path=/opt/nscell-inputs \
+    readonly=true \
+    io.bus=auto
+  sudo incus --quiet config device add \
+    "${_vm_name}" nscell-ci disk \
+    source="${_ci_repo}" \
+    path=/opt/nscell-ci \
+    readonly=true \
+    io.bus=auto
+  sudo incus --quiet start "${_vm_name}"
   if ! __wait_for_agent; then
     __collect_guest_logs
     return 1
   fi
-}
-
-__copy_inputs() {
-  sudo incus file push "${_nscell_binary}" "${_vm_name}/opt/nscell.test"
-  sudo incus file push "${_docker_archive}" "${_vm_name}/opt/nscell-docker-images.tar"
-  sudo incus file push "${_oras_binary}" "${_vm_name}/opt/oras.test"
-  sudo incus exec "${_vm_name}" -- mkdir -p /opt/nscell-ci
-  tar --exclude=.git -C "${_ci_repo}" -cf - . |
-    sudo incus exec "${_vm_name}" -- tar -xf - -C /opt/nscell-ci
 }
 
 __configure_guest() {
@@ -133,17 +142,14 @@ set -euo pipefail
 _test_mode="${NSCELL_TEST_MODE}"
 _workloads="${NSCELL_TEST_WORKLOADS}"
 
-install -m 0755 /opt/oras.test /usr/local/bin/oras
-rm -f /opt/oras.test
-docker load --input /opt/nscell-docker-images.tar
-rm -f /opt/nscell-docker-images.tar
+install -m 0755 /opt/nscell-inputs/oras /usr/local/bin/oras
+docker load --input /opt/nscell-inputs/docker-images.tar
 mountpoint -q /sys/fs/bpf || mount -t bpf bpf /sys/fs/bpf
 grep -qw bpf /sys/kernel/security/lsm
 
 cd /opt/nscell-ci
-export NSCELL_BINARY=/opt/nscell.test
+export NSCELL_BINARY=/opt/nscell-inputs/nscell
 bash scripts/ci.sh setup-runtime-host
-rm -f /opt/nscell.test
 bash scripts/ci.sh verify-gate
 
 case "${_test_mode}" in
@@ -183,7 +189,6 @@ __main() {
   __prepare_test_assets
   __prepare_image
   __launch_vm
-  __copy_inputs
   __configure_guest
   __collect_guest_logs
   __log "${_test_mode} test passed for ${_image_ref}"

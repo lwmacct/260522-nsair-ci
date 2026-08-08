@@ -8,7 +8,8 @@ The image definition is `images/nscell-test-vm.yaml`. It contains the Incus VM
 agent, the Docker runtime stack, FUSE and idmap utilities, diagnostics, and a
 guest GRUB command line that enables the BPF LSM. It does not contain an
 NSCell binary; each test workflow accepts an nscell OCI image, extracts its
-AMD64 binary on the GitHub runner, and injects it into a disposable VM.
+AMD64 binary on the GitHub runner, and exposes it to a disposable VM through a
+read-only Incus disk share.
 
 The image workflow publishes an OCI artifact to:
 
@@ -35,7 +36,9 @@ The artifact contains `incus.tar.xz`, `disk.qcow2`, and `SHA256SUMS`.
 Both test workflows accept `nscell_image`. The nscell release workflow passes
 an immutable digest, while manual runs can select any published nscell image.
 The smoke workflow also pulls and exports its BusyBox image on the runner, so
-the guest setup and smoke test do not depend on guest network access.
+the guest setup and smoke test do not depend on guest network access. Test
+assets and the CI repository are mounted read-only with Incus' automatic VM
+directory transport, which prefers `virtiofs` and falls back to `9p`.
 
 The VM runner always uses KVM and is AMD64-only. Failed runs upload the guest
 daemon log, systemd/Docker diagnostics, and `/data/nscell` test logs.
