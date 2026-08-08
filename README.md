@@ -33,3 +33,6 @@ jobs, logs, and artifacts therefore remain in this public repository. It
 installs ORAS, fetches the selected linux/amd64 image manifest and layers,
 extracts `/usr/local/bin/nscell`, then installs the binary and the
 `nscell-daemon.service` systemd unit on the runner.
+
+The dedicated Ubuntu VM image and its nested Incus validation workflows are
+documented in [`docs/nscell-vm.md`](docs/nscell-vm.md).

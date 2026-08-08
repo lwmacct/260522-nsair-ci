@@ -1,0 +1,41 @@
+name: Test NSCell VM smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_ref:
+        description: Incus VM OCI artifact to import
+        required: true
+        default: ghcr.io/lwmacct/260522-nscell-ci:nscell-test-ubuntu24.04-amd64-vm
+        type: string
+      nscell_ref:
+        description: nscell repository ref to build
+        required: true
+        default: main
+        type: string
+  workflow_run:
+    workflows:
+      - Build NSCell test VM image
+    types:
+      - completed
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: nscell-vm-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    uses: ./.github/workflows/test-nscell-vm-reusable.yml
+    with:
+      image_ref: ${{ inputs.image_ref || 'ghcr.io/lwmacct/260522-nscell-ci:nscell-test-ubuntu24.04-amd64-vm' }}
+      nscell_ref: ${{ inputs.nscell_ref || 'main' }}
+      test_mode: smoke
+      workloads: procfs-cpu
+    permissions:
+      contents: read
+      packages: read

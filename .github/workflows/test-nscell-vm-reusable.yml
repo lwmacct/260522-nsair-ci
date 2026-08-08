@@ -1,0 +1,147 @@
+name: Test NSCell in Ubuntu VM (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      image_ref:
+        description: Incus VM OCI artifact to import
+        required: true
+        type: string
+      nscell_ref:
+        description: nscell repository ref to build
+        required: true
+        type: string
+      test_mode:
+        description: VM test mode
+        required: true
+        type: string
+      workloads:
+        description: Space-separated workload names, or all
+        required: false
+        default: procfs-cpu
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  REGISTRY: ghcr.io
+  ORAS_VERSION: 1.3.3
+
+jobs:
+  test:
+    name: ${{ inputs.test_mode }} / Ubuntu 24.04 VM
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ inputs.test_mode == 'workloads' && 120 || 35 }}
+
+    steps:
+      - name: Checkout nscell-ci
+        uses: actions/checkout@v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Checkout nscell source
+        uses: actions/checkout@v7.0.0
+        with:
+          repository: lwmacct/260522-nscell
+          ref: ${{ inputs.nscell_ref }}
+          path: nscell-source
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v6.5.0
+        with:
+          go-version-file: nscell-source/go.mod
+          cache-dependency-path: nscell-source/go.sum
+
+      - name: Install host dependencies and Incus from Zabbly
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential \
+            ca-certificates \
+            curl \
+            dnsmasq-base \
+            gdisk \
+            jq \
+            ovmf \
+            qemu-system-modules-spice \
+            qemu-system-x86 \
+            qemu-utils \
+            xz-utils
+          sudo install -d -m 0755 /etc/apt/keyrings
+          sudo curl -fsSL https://pkgs.zabbly.com/key.asc \
+            -o /etc/apt/keyrings/zabbly.asc
+          sudo tee /etc/apt/sources.list.d/zabbly-incus-stable.sources >/dev/null <<EOF
+          Enabled: yes
+          Types: deb
+          URIs: https://pkgs.zabbly.com/incus/stable
+          Suites: $(. /etc/os-release && echo "${VERSION_CODENAME}")
+          Components: main
+          Architectures: $(dpkg --print-architecture)
+          Signed-By: /etc/apt/keyrings/zabbly.asc
+          EOF
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends incus
+          apt-cache policy incus
+          apt-cache policy incus | grep -q 'https://pkgs.zabbly.com/incus/stable'
+
+      - name: Build nscell binary
+        working-directory: nscell-source
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/nscell-bin"
+          CGO_ENABLED=1 go build \
+            -tags "seccomp idmapped_mnt" \
+            -ldflags "-s -w" \
+            -o "${RUNNER_TEMP}/nscell-bin/nscell" \
+            ./cmd/nscell
+          "${RUNNER_TEMP}/nscell-bin/nscell" version
+
+      - name: Setup Incus
+        run: |
+          set -euo pipefail
+          sudo systemctl enable --now incus.socket
+          sudo incus admin waitready
+          sudo incus admin init --minimal
+          test -c /dev/kvm
+          sudo incus version
+
+      - name: Setup ORAS ${{ env.ORAS_VERSION }}
+        uses: oras-project/setup-oras@v2.0.1
+        with:
+          version: ${{ env.ORAS_VERSION }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4.2.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run ${{ inputs.test_mode }} test in VM
+        env:
+          NSCELL_VM_BINARY: ${{ runner.temp }}/nscell-bin/nscell
+          NSCELL_VM_CI_REPO: ${{ github.workspace }}
+          NSCELL_VM_LOG_DIR: ${{ runner.temp }}/nscell-vm-logs
+        run: |
+          set -euo pipefail
+          bash .github/scripts/run-nscell-test-vm.sh \
+            "${{ inputs.image_ref }}" \
+            "${{ inputs.test_mode }}" \
+            "${{ inputs.workloads }}"
+
+      - name: Upload VM diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: nscell-vm-${{ inputs.test_mode }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/nscell-vm-logs/**
+          if-no-files-found: ignore
