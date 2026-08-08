@@ -15,7 +15,7 @@ source "${_workload_dir}/library/images.sh"
 source "${_workload_dir}/library/oci.sh"
 
 _state_root="/run/nscell-ci-storage-crash-boundaries"
-_wrapper_dir="${_state_root}/bin"
+_wrapper_dir="/usr/local/libexec/nscell-ci-storage-crash-boundaries"
 _drop_in_dir="/etc/systemd/system/nscell-daemon.service.d"
 _drop_in="${_drop_in_dir}/storage-crash-boundaries.conf"
 _sync_in_bundle="${_volume_root}/storage-crash-boundaries/sync-in-bundle"
@@ -64,22 +64,21 @@ __cleanup() {
   __remove_oci_bundle "$_sync_out_bundle"
   sudo rm -f "$_drop_in"
   sudo systemctl daemon-reload
-  sudo umount /usr/bin/rsync >/dev/null 2>&1 || true
   sudo systemctl restart nscell-daemon.service >/dev/null 2>&1 || true
-  sudo rm -rf "$_state_root"
+  sudo rm -rf "$_state_root" "$_wrapper_dir"
 }
 
 __install_rsync_wrapper() {
-  sudo install -d -m 0700 "$_wrapper_dir" "$_drop_in_dir"
-  sudo install -m 0755 /usr/bin/rsync "${_state_root}/rsync.real"
+  sudo install -d -m 0700 "$_state_root" "$_wrapper_dir" "$_drop_in_dir"
+  sudo install -m 0755 /usr/bin/rsync "${_wrapper_dir}/rsync.real"
   sudo install -m 0755 "${_workload_path}/rsync-wrapper.sh" "${_wrapper_dir}/rsync"
-  sudo mount --bind "${_wrapper_dir}/rsync" /usr/bin/rsync
   printf '%s\n' \
     '[Service]' \
     "Environment=PATH=${_wrapper_dir}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" |
     sudo tee "$_drop_in" >/dev/null
   sudo rm -f "${_state_root}/mode" "${_state_root}/triggered" "${_state_root}/daemon.pid" \
     "${_state_root}/invocations.log" "${_state_root}/rsync-output.log"
+  sudo "${_wrapper_dir}/rsync" --version >/dev/null
   sudo systemctl daemon-reload
   sudo systemctl restart nscell-daemon.service
   __assert_nscell_ready
@@ -325,7 +324,6 @@ __main() {
   __require_cmd docker
   __require_cmd jq
   __require_cmd rsync
-  __require_cmd mount
   __require_cmd systemctl
   __require_cmd timeout
   __assert_nscell_ready
