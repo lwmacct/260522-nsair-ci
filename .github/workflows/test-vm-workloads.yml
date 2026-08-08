@@ -1,4 +1,4 @@
-name: Test NSCell VM smoke
+name: Test NSCell VM workloads
 
 on:
   workflow_dispatch:
@@ -13,22 +13,28 @@ on:
         required: true
         default: ghcr.io/lwmacct/260522-nscell:latest
         type: string
+      workloads:
+        description: Space-separated workload names, or all
+        required: true
+        default: procfs-cpu
+        type: string
+
 permissions:
   contents: read
   packages: read
 
 concurrency:
-  group: nscell-vm-smoke-${{ github.ref }}
+  group: nscell-vm-workloads-${{ github.ref }}-${{ inputs.workloads || 'procfs-cpu' }}
   cancel-in-progress: true
 
 jobs:
   test:
-    uses: ./.github/workflows/test-nscell-vm-reusable.yml
+    uses: ./.github/workflows/test-vm-reusable.yml
     with:
       image_ref: ${{ inputs.image_ref || 'ghcr.io/lwmacct/260522-nscell-ci:nscell-test-ubuntu24.04-amd64-vm' }}
       nscell_image: ${{ inputs.nscell_image || 'ghcr.io/lwmacct/260522-nscell:latest' }}
-      test_mode: smoke
-      workloads: procfs-cpu
+      test_mode: workloads
+      workloads: ${{ inputs.workloads || 'procfs-cpu' }}
     permissions:
       contents: read
       packages: read

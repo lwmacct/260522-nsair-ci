@@ -1,0 +1,147 @@
+name: Test NSCell VM network
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_ref:
+        description: Published Incus VM OCI artifact
+        required: true
+        default: ghcr.io/lwmacct/260522-nscell-ci:nscell-test-ubuntu24.04-amd64-vm
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: nscell-vm-network-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  ORAS_VERSION: 1.3.3
+
+jobs:
+  network:
+    name: Ubuntu 24.04 VM / Incus managed bridge
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout nscell-ci
+        uses: actions/checkout@v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install Incus from Zabbly
+        run: |
+          __main() {
+            set -euo pipefail
+
+            sudo apt-get update
+            sudo apt-get install --yes --no-install-recommends \
+              ca-certificates \
+              curl \
+              dnsmasq-base \
+              gdisk \
+              iptables \
+              iputils-ping \
+              jq \
+              ovmf \
+              qemu-system-modules-spice \
+              qemu-system-x86 \
+              qemu-utils \
+              xz-utils
+            sudo install -d -m 0755 /etc/apt/keyrings
+            sudo curl -fsSL https://pkgs.zabbly.com/key.asc \
+              -o /etc/apt/keyrings/zabbly.asc
+            sudo tee /etc/apt/sources.list.d/zabbly-incus-stable.sources >/dev/null <<EOF
+          Enabled: yes
+          Types: deb
+          URIs: https://pkgs.zabbly.com/incus/stable
+          Suites: $(. /etc/os-release && echo "${VERSION_CODENAME}")
+          Components: main
+          Architectures: $(dpkg --print-architecture)
+          Signed-By: /etc/apt/keyrings/zabbly.asc
+          EOF
+            sudo apt-get update
+            sudo apt-get install --yes --no-install-recommends incus
+            apt-cache policy incus | grep -q \
+              'https://pkgs.zabbly.com/incus/stable'
+          }
+
+          __main "$@"
+
+      - name: Setup Incus managed bridge
+        run: bash .github/scripts/setup-incus-host.sh
+
+      - name: Setup ORAS ${{ env.ORAS_VERSION }}
+        uses: oras-project/setup-oras@v2.0.1
+        with:
+          version: ${{ env.ORAS_VERSION }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start VM and verify managed networking
+        env:
+          IMAGE_REF: ${{ inputs.image_ref }}
+          NSCELL_VM_LOG_DIR: ${{ runner.temp }}/nscell-vm-network-logs
+        run: |
+          _resource_id="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          _vm_name="nscell-network-${_resource_id}"
+          _image_alias="${_vm_name}-image"
+
+          __cleanup() {
+            local _status=$?
+            sudo incus delete --force "${_vm_name}" 2>/dev/null || true
+            sudo incus image delete "${_image_alias}" 2>/dev/null || true
+            return "${_status}"
+          }
+
+          __main() {
+            set -euo pipefail
+
+            local _image_dir
+            _image_dir="${RUNNER_TEMP}/${_vm_name}"
+            trap __cleanup EXIT HUP INT TERM
+
+            mkdir -p "${_image_dir}"
+            oras pull --output "${_image_dir}" "${IMAGE_REF}"
+            (
+              cd "${_image_dir}"
+              sha256sum --check SHA256SUMS
+              qemu-img check disk.qcow2
+            )
+            sudo incus --quiet image import \
+              "${_image_dir}/incus.tar.xz" \
+              "${_image_dir}/disk.qcow2" \
+              --alias "${_image_alias}"
+            sudo incus --quiet init "${_image_alias}" "${_vm_name}" \
+              --vm \
+              -c security.secureboot=false \
+              -c limits.cpu=2 \
+              -c limits.memory=4GiB
+            sudo incus --quiet start "${_vm_name}"
+
+            NSCELL_VM_NAME="${_vm_name}" \
+              bash .github/scripts/check-incus-vm-network.sh
+          }
+
+          __main "$@"
+
+      - name: Upload network diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: nscell-vm-network-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/nscell-vm-network-logs/**
+          if-no-files-found: ignore
